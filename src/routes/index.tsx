@@ -44,6 +44,12 @@ type Board = {
 const STATUSES: Status[] = ["A fazer", "Trabalhando", "Em revisão", "Concluído", "Travado"];
 const PRIORITIES: Priority[] = ["Crítica", "Alta", "Média", "Baixa"];
 const USERS = ["Johnnathan", "Emanuel"];
+// Avatar de cada usuário: cor própria em vez do cinza genérico, para identificar de longe.
+const USER_AVATAR_BG: Record<string, string> = {
+  Johnnathan: "#0073ea",
+  Emanuel: "#00c875",
+};
+const avatarBg = (name: string) => USER_AVATAR_BG[name] ?? "#cbd5e1";
 const PRIORITY_ORDER: Record<Priority, number> = {
   Crítica: 0,
   Alta: 1,
@@ -690,7 +696,7 @@ function MondayBoard() {
           <div className="flex items-center gap-2">
             <MondayLogo />
             <div>
-              <p className="text-lg font-bold">Monday 2.0</p>
+              <p className="text-lg font-bold">MONDAY 2.0</p>
               <p className="text-xs text-slate-500">Quadros de tarefas</p>
             </div>
           </div>
@@ -715,7 +721,7 @@ function MondayBoard() {
             <div className="flex flex-col gap-1">
               {USERS.map((u) => (
                 <span key={u} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-bold">{u[0]}</span>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: avatarBg(u) }}>{u[0]}</span>
                   {u}
                 </span>
               ))}
@@ -747,7 +753,7 @@ function MondayBoard() {
             </div>
             <div className="flex items-center gap-2">
               {USERS.map((u) => (
-                <span key={u} title={u} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-sm font-bold">{u[0]}</span>
+                <span key={u} title={u} className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: avatarBg(u) }}>{u[0]}</span>
               ))}
             </div>
           </div>
@@ -885,7 +891,7 @@ function MondayBoard() {
                                   </button>
                                 </td>
                                 <td className="border border-slate-200 px-2 py-2 text-center">
-                                  <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} title={task.owner || "Sem responsável"} className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-bold">
+                                  <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} title={task.owner || "Sem responsável"} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${task.owner ? "text-white" : "bg-slate-200"}`} style={task.owner ? { backgroundColor: avatarBg(task.owner) } : undefined}>
                                     {task.owner ? task.owner[0] : "○"}
                                   </button>
                                 </td>
@@ -980,7 +986,10 @@ function MondayBoard() {
                         <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} title="Abrir atualização" className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                           💬 Atualização{(t.updates ?? []).length > 0 ? ` (${(t.updates ?? []).length})` : ""}
                         </button>
-                        <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due) || "Sem prazo"}</p>
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                          {t.owner && <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: avatarBg(t.owner) }}>{t.owner[0]}</span>}
+                          {t.owner || "Sem responsável"} · {formatDate(t.due) || "Sem prazo"}
+                        </p>
                         <div className="mt-2 flex gap-2">
                           <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: PRIORITY_BG[t.priority] }}>{t.priority}</span>
                           <ColorDropdown
@@ -1052,7 +1061,7 @@ function MondayBoard() {
                   {(
                     <div className="flex-1 overflow-y-auto px-6 py-4">
                       <div className="mb-3 flex items-center gap-2 text-sm">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 font-bold">{updateAuthor[0]}</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full font-bold text-white" style={{ backgroundColor: avatarBg(updateAuthor) }}>{updateAuthor[0]}</span>
                         <label className="font-semibold">Quem está escrevendo?
                           <select value={updateAuthor} onChange={(e) => setUpdateAuthor(e.target.value)} className="ml-2 rounded-md border px-2 py-1.5 font-normal">{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
                         </label>
@@ -1084,7 +1093,8 @@ function MondayBoard() {
                             <p className="mb-1 text-xs text-slate-500">Marcar alguém:</p>
                             <div className="flex flex-wrap gap-2">
                               {mentionOptions.map((u) => (
-                                <button key={u} onClick={() => insertMention(u)} className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-600">
+                                <button key={u} onClick={() => insertMention(u)} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-600">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: avatarBg(u) }}>{u[0]}</span>
                                   @{u}
                                 </button>
                               ))}
@@ -1124,7 +1134,7 @@ function MondayBoard() {
                         <div className="mt-6 flex flex-col gap-4">
                           {updates.map((u) => (
                             <div key={u.id} className="flex gap-3">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold">{u.author[0]}</span>
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: avatarBg(u.author) }}>{u.author[0]}</span>
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-bold">{u.author}</p>
