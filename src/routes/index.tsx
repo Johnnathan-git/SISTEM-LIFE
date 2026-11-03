@@ -190,10 +190,7 @@ function MondayBoard() {
   const [boardId, setBoardId] = useState<string>("");
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
-  const [personFilter, setPersonFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
-  const [sortByPriority, setSortByPriority] = useState(true);
-  const [showPriority, setShowPriority] = useState(true);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [newBoardName, setNewBoardName] = useState("");
   const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
@@ -440,13 +437,6 @@ function MondayBoard() {
     }
   };
 
-  const deleteGroup = (groupId: string) => {
-    const group = board.groups.find((g) => g.id === groupId);
-    if (!group) return;
-    if (group.tasks.length > 0 && !window.confirm(`Excluir o grupo "${group.name}" com ${group.tasks.length} tarefa(s)?`)) return;
-    updateBoard({ ...board, groups: board.groups.filter((g) => g.id !== groupId) });
-  };
-
   const addTaskWithStatus = (status: Status) => {
     if (status === "Concluído") {
       const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
@@ -475,22 +465,12 @@ function MondayBoard() {
   const matches = (t: Task) => {
     const bySearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.owner.toLowerCase().includes(search.toLowerCase());
     const byStatus = statusFilter === "Todos" || t.status === statusFilter;
-    const byPerson = personFilter === "Todos" || t.owner === personFilter;
-    return bySearch && byStatus && byPerson;
+    return bySearch && byStatus;
   };
 
-  const orderedTasks = (tasks: Task[]) => {
-    const filtered = tasks.filter(matches);
-    if (!sortByPriority) return filtered;
-    return [...filtered].sort((a, b) => {
-      if (PRIORITY_ORDER[a.priority] !== PRIORITY_ORDER[b.priority]) return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
-      if (!a.due) return 1;
-      if (!b.due) return -1;
-      return a.due.localeCompare(b.due);
-    });
-  };
+  const orderedTasks = (tasks: Task[]) => tasks.filter(matches);
 
-  const visibleTasks = useMemo(() => allTasks.filter(matches), [boards, boardId, search, statusFilter, personFilter]);
+  const visibleTasks = useMemo(() => allTasks.filter(matches), [boards, boardId, search, statusFilter]);
 
   const createBoard = () => {
     const name = newBoardName.trim() || "Novo quadro";
@@ -595,25 +575,12 @@ function MondayBoard() {
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="w-32 outline-none" />
             </label>
             <label className="flex items-center gap-1">
-              <span>👤</span>
-              <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="bg-transparent outline-none">
-                <option value="Todos">Pessoa</option>
-                {USERS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </label>
-            <label className="flex items-center gap-1">
               <span>▽</span>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "Todos" | Status)} className="bg-transparent outline-none">
                 <option value="Todos">Filtrar</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
-            <button onClick={() => setSortByPriority((v) => !v)} className="flex items-center gap-1">
-              ↕ {sortByPriority ? "Ordenar por prioridade ✓" : "Ordenar por prioridade"}
-            </button>
-            <button onClick={() => setShowPriority((v) => !v)} className="flex items-center gap-1">
-              👁 {showPriority ? "Ocultar prioridade" : "Mostrar prioridade"}
-            </button>
           </div>
 
           {view === "table" ? (
@@ -644,8 +611,6 @@ function MondayBoard() {
                         style={{ color: group.color }}
                         aria-label="Nome do grupo"
                       />
-                      <span className="text-sm font-normal text-slate-400">({group.tasks.length})</span>
-                      <button onClick={() => deleteGroup(group.id)} title="Excluir grupo" aria-label={`Excluir grupo ${group.name}`} className="text-slate-400 hover:text-red-600">✕</button>
                     </div>
                     {!isCollapsed && (
                       <div className="overflow-x-auto">
@@ -658,7 +623,7 @@ function MondayBoard() {
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Pessoa</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
-                              {showPriority && <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>}
+                              <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>
                               <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Data</th>
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal">+</th>
                             </tr>
@@ -682,9 +647,13 @@ function MondayBoard() {
                                   />
                                 </td>
                                 <td className="border border-slate-200 px-3 py-2">
-                                  <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="text-left text-slate-900" title="Abrir tarefa e ver observações">
-                                    {task.title || "Sem título"}
-                                  </button>
+                                  <input
+                                    value={task.title}
+                                    onChange={(e) => updateTask(group.id, task.id, { title: e.target.value })}
+                                    placeholder="Nova tarefa"
+                                    aria-label="Título da tarefa"
+                                    className="w-full bg-transparent text-slate-900 outline-none"
+                                  />
                                 </td>
                                 <td className="border border-slate-200 px-2 py-2 text-center">
                                   <button
@@ -715,18 +684,16 @@ function MondayBoard() {
                                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                                   </select>
                                 </td>
-                                {showPriority && (
-                                  <td className="border border-slate-200 p-0">
-                                    <select
-                                      value={task.priority}
-                                      onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })}
-                                      className="w-full appearance-none px-2 py-2.5 text-center font-medium text-white outline-none"
-                                      style={{ backgroundColor: PRIORITY_BG[task.priority] }}
-                                    >
-                                      {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                  </td>
-                                )}
+                                <td className="border border-slate-200 p-0">
+                                  <select
+                                    value={task.priority}
+                                    onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })}
+                                    className="w-full appearance-none px-2 py-2.5 text-center font-medium text-white outline-none"
+                                    style={{ backgroundColor: PRIORITY_BG[task.priority] }}
+                                  >
+                                    {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                                  </select>
+                                </td>
                                 <td className="border border-slate-200 px-2 py-2 text-center text-slate-500">
                                   <input type="date" value={task.due} onChange={(e) => updateTask(group.id, task.id, { due: e.target.value })} className="bg-transparent text-center outline-none" />
                                 </td>
@@ -737,7 +704,7 @@ function MondayBoard() {
                             ))}
                             <tr>
                               <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
-                              <td colSpan={showPriority ? 8 : 7} className="border border-slate-200 px-3 py-2">
+                              <td colSpan={8} className="border border-slate-200 px-3 py-2">
                                 <button onClick={() => addTask(group.id)} className="text-slate-500">+ Adicionar Tarefa</button>
                               </td>
                             </tr>
@@ -752,7 +719,7 @@ function MondayBoard() {
                                   })}
                                 </div>
                               </td>
-                              {showPriority && <td className="border border-slate-200" />}
+                              <td className="border border-slate-200" />
                               <td colSpan={2} className="border border-slate-200" />
                             </tr>
                           </tbody>
@@ -788,7 +755,13 @@ function MondayBoard() {
                         onDragStart={() => setDragTask({ groupId: t.groupId, taskId: t.id })}
                         onDragEnd={() => setDragTask(null)}
                       >
-                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="text-left font-semibold text-slate-900" title="Abrir tarefa e ver observações">{t.title}</button>
+                        <input
+                          value={t.title}
+                          onChange={(e) => updateTask(t.groupId, t.id, { title: e.target.value })}
+                          placeholder="Nova tarefa"
+                          aria-label="Título da tarefa"
+                          className="w-full bg-transparent font-semibold text-slate-900 outline-none"
+                        />
                         <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} title="Abrir atualização" className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                           💬 Atualização{(t.updates ?? []).length > 0 ? ` (${(t.updates ?? []).length})` : ""}
                         </button>
@@ -822,13 +795,7 @@ function MondayBoard() {
                   <div className="flex items-start justify-between gap-3 px-6 pt-5">
                     <button onClick={() => setSelected(null)} className="text-xl text-slate-500" aria-label="Fechar">✕</button>
                   </div>
-                  <input
-                    value={selTask.title}
-                    onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })}
-                    placeholder="Título da tarefa"
-                    aria-label="Título da tarefa"
-                    className="mx-6 mt-2 w-[calc(100%-3rem)] rounded-md border border-transparent px-2 py-1 text-2xl font-bold text-slate-900 outline-none hover:border-slate-200 focus:border-slate-400"
-                  />
+                  <h2 className="px-6 pt-2 text-2xl font-bold text-slate-900">{selTask.title || "Sem título"}</h2>
                   <p className="px-6 pb-1 text-sm text-slate-500">
                     {selTask.owner || "Sem responsável"} · {selTask.status} · {selTask.priority} · {selTask.due ? formatDate(selTask.due) : "Sem prazo"} · Grupo: {selGroup.name}
                   </p>
@@ -837,9 +804,6 @@ function MondayBoard() {
                   </button>
                   {showDetails && (
                     <div className="mx-6 mb-4 rounded-lg border border-slate-200 p-4">
-                      <label className="mb-3 block text-sm font-semibold">Título
-                        <input value={selTask.title} onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
-                      </label>
                       <div className="mb-3 grid grid-cols-2 gap-3">
                         <label className="block text-sm font-semibold">Responsável
                           <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
