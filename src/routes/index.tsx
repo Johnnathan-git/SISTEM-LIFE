@@ -197,7 +197,9 @@ function MondayBoard() {
   const [newBoardName, setNewBoardName] = useState("");
   const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
   const [updateText, setUpdateText] = useState("");
-  const [updateTab, setUpdateTab] = useState<"updates" | "files" | "activity" | "info" | "card">("updates");
+  const [updateTab, setUpdateTab] = useState<"updates" | "files" | "activity">("updates");
+  const [showDetails, setShowDetails] = useState(false);
+  const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
@@ -227,6 +229,18 @@ function MondayBoard() {
       el.focus();
       el.setSelectionRange(start + before.length, start + before.length + selectedText.length);
     }, 0);
+  };
+
+  const mentionMatch = updateText.slice(0, cursorPos).match(/@([\wÀ-ÿ]*)$/);
+  const mentionQuery = mentionMatch ? mentionMatch[1] : null;
+  const mentionOptions = mentionQuery !== null ? USERS.filter((u) => u.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [];
+  const insertMention = (user: string) => {
+    if (mentionQuery === null) return;
+    const before = updateText.slice(0, cursorPos - mentionQuery.length - 1);
+    const after = updateText.slice(cursorPos);
+    setUpdateText(`${before}@${user} ${after}`);
+    setCursorPos(before.length + user.length + 2);
+    setTimeout(() => editorRef.current?.focus(), 0);
   };
 
   const board = boards.find((b) => b.id === boardId) ?? boards[0];
@@ -684,25 +698,51 @@ function MondayBoard() {
               { id: "updates", label: "Atualizações" },
               { id: "files", label: "Arquivos" },
               { id: "activity", label: "Registro de Atividades" },
-              { id: "info", label: "Caixas de Informação" },
-              { id: "card", label: "Cartão do Item" },
             ] as const;
             return (
               <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={() => setSelected(null)}>
                 <div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-start justify-between gap-3 px-6 pt-5">
                     <button onClick={() => setSelected(null)} className="text-xl text-slate-500" aria-label="Fechar">✕</button>
-                    <div className="flex items-center gap-2">
-                      {USERS.map((u) => (
-                        <span key={u} title={u} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-sm font-bold">{u[0]}</span>
-                      ))}
-                      <span className="text-slate-400">•••</span>
-                    </div>
+                    <span className="text-slate-400">•••</span>
                   </div>
                   <h2 className="px-6 pt-2 text-2xl font-bold text-slate-900">{selTask.title || "Sem título"}</h2>
-                  <p className="px-6 pb-3 text-sm text-slate-500">
+                  <p className="px-6 pb-1 text-sm text-slate-500">
                     {selTask.owner || "Sem responsável"} · {selTask.status} · {selTask.priority} · {selTask.due ? formatDate(selTask.due) : "Sem prazo"} · Grupo: {selGroup.name}
                   </p>
+                  <button onClick={() => setShowDetails((v) => !v)} className="px-6 pb-3 text-left text-sm text-slate-500">
+                    Editar detalhes {showDetails ? "▾" : "▸"}
+                  </button>
+                  {showDetails && (
+                    <div className="mx-6 mb-4 rounded-lg border border-slate-200 p-4">
+                      <label className="mb-3 block text-sm font-semibold">Título
+                        <input value={selTask.title} onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
+                      </label>
+                      <div className="mb-3 grid grid-cols-2 gap-3">
+                        <label className="block text-sm font-semibold">Responsável
+                          <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                        </label>
+                        <label className="block text-sm font-semibold">Status
+                          <select value={selTask.status} onChange={(e) => updateTask(selGroup.id, selTask.id, { status: e.target.value as Status })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}</select>
+                        </label>
+                        <label className="block text-sm font-semibold">Prioridade
+                          <select value={selTask.priority} onChange={(e) => updateTask(selGroup.id, selTask.id, { priority: e.target.value as Priority })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{PRIORITIES.map((pr) => <option key={pr} value={pr}>{pr}</option>)}</select>
+                        </label>
+                        <label className="block text-sm font-semibold">Prazo
+                          <input type="date" value={selTask.due} onChange={(e) => updateTask(selGroup.id, selTask.id, { due: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal" />
+                        </label>
+                      </div>
+                      <button
+                        onClick={() => {
+                          removeTask(selGroup.id, selTask.id);
+                          setSelected(null);
+                        }}
+                        className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                      >
+                        Excluir tarefa
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-center gap-5 overflow-x-auto border-b border-slate-200 px-6 text-sm">
                     {tabs.map((tab) => (
                       <button
@@ -719,6 +759,12 @@ function MondayBoard() {
 
                   {updateTab === "updates" && (
                     <div className="flex-1 overflow-y-auto px-6 py-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 font-bold">{updateAuthor[0]}</span>
+                        <label className="font-semibold">Quem está escrevendo?
+                          <select value={updateAuthor} onChange={(e) => setUpdateAuthor(e.target.value)} className="ml-2 rounded-md border px-2 py-1.5 font-normal">{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                        </label>
+                      </div>
                       <div className="rounded-lg border border-slate-300">
                         <div className="flex flex-wrap gap-1 border-b border-slate-200 px-3 py-2 text-sm text-slate-500">
                           <button className="px-1.5" title="Parágrafo">¶</button>
@@ -735,26 +781,35 @@ function MondayBoard() {
                         <textarea
                           ref={editorRef}
                           value={updateText}
-                          onChange={(e) => setUpdateText(e.target.value)}
+                          onChange={(e) => {
+                            setUpdateText(e.target.value);
+                            setCursorPos(e.target.selectionStart ?? e.target.value.length);
+                          }}
+                          onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
                           rows={4}
                           placeholder="Escreva uma atualização..."
                           className="w-full resize-none px-4 py-3 text-sm outline-none"
                         />
-                        <div className="border-t border-slate-200 px-4 py-3">
-                          <p className="mb-2 text-sm text-slate-600">Mantenha sua equipe informada:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {USERS.map((u) => (
-                              <button key={u} onClick={() => setUpdateText((prev) => `${prev}@${u} `)} className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-600">
-                                @{u}
-                              </button>
-                            ))}
+                        {mentionQuery !== null && mentionOptions.length > 0 && (
+                          <div className="border-t border-slate-200 px-4 py-2">
+                            <p className="mb-1 text-xs text-slate-500">Marcar alguém:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {mentionOptions.map((u) => (
+                                <button key={u} onClick={() => insertMention(u)} className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-600">
+                                  @{u}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
                         <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
                           <div className="flex items-center gap-3 text-sm text-slate-500">
-                            <span>@ Mencionar</span>
+                            <button onClick={() => {
+                              setUpdateText((prev) => `${prev}@`);
+                              setCursorPos(updateText.length + 1);
+                              setTimeout(() => editorRef.current?.focus(), 0);
+                            }}>@ Mencionar</button>
                             <span>📎</span>
-                            <span>GIF</span>
                             <span>😊</span>
                             <span>✨</span>
                           </div>
@@ -764,11 +819,6 @@ function MondayBoard() {
                         </div>
                       </div>
 
-                      <div className="mt-4">
-                        <label className="mb-2 block text-sm font-semibold">Quem está escrevendo?
-                          <select value={updateAuthor} onChange={(e) => setUpdateAuthor(e.target.value)} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
-                        </label>
-                      </div>
 
                       {updates.length === 0 ? (
                         <div className="mt-8 text-center">
@@ -812,49 +862,6 @@ function MondayBoard() {
                     </div>
                   )}
 
-                  {updateTab === "info" && (
-                    <div className="flex-1 px-6 py-6">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="rounded-lg border border-slate-200 p-3"><p className="text-slate-500">Responsável</p><p className="font-semibold">{selTask.owner || "Sem responsável"}</p></div>
-                        <div className="rounded-lg border border-slate-200 p-3"><p className="text-slate-500">Status</p><p className="font-semibold">{selTask.status}</p></div>
-                        <div className="rounded-lg border border-slate-200 p-3"><p className="text-slate-500">Prioridade</p><p className="font-semibold">{selTask.priority}</p></div>
-                        <div className="rounded-lg border border-slate-200 p-3"><p className="text-slate-500">Prazo</p><p className="font-semibold">{selTask.due ? formatDate(selTask.due) : "Sem prazo"}</p></div>
-                        <div className="rounded-lg border border-slate-200 p-3"><p className="text-slate-500">Grupo</p><p className="font-semibold">{selGroup.name}</p></div>
-                        <div className="rounded-lg border border-slate-200 p-3"><p className="text-slate-500">Quadro</p><p className="font-semibold">{board.name}</p></div>
-                      </div>
-                    </div>
-                  )}
-
-                  {updateTab === "card" && (
-                    <div className="flex-1 overflow-y-auto px-6 py-6">
-                      <label className="mb-3 block text-sm font-semibold">Título
-                        <input value={selTask.title} onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
-                      </label>
-                      <div className="mb-4 grid grid-cols-2 gap-3">
-                        <label className="block text-sm font-semibold">Responsável
-                          <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
-                        </label>
-                        <label className="block text-sm font-semibold">Status
-                          <select value={selTask.status} onChange={(e) => updateTask(selGroup.id, selTask.id, { status: e.target.value as Status })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}</select>
-                        </label>
-                        <label className="block text-sm font-semibold">Prioridade
-                          <select value={selTask.priority} onChange={(e) => updateTask(selGroup.id, selTask.id, { priority: e.target.value as Priority })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{PRIORITIES.map((pr) => <option key={pr} value={pr}>{pr}</option>)}</select>
-                        </label>
-                        <label className="block text-sm font-semibold">Prazo
-                          <input type="date" value={selTask.due} onChange={(e) => updateTask(selGroup.id, selTask.id, { due: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal" />
-                        </label>
-                      </div>
-                      <button
-                        onClick={() => {
-                          removeTask(selGroup.id, selTask.id);
-                          setSelected(null);
-                        }}
-                        className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                      >
-                        Excluir tarefa
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             );
