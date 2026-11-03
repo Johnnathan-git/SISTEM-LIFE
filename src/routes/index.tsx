@@ -8,6 +8,13 @@ export const Route = createFileRoute("/")({
 type Status = "A fazer" | "Trabalhando" | "Em revisão" | "Concluído" | "Travado";
 type Priority = "Crítica" | "Alta" | "Média" | "Baixa";
 
+type Update = {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+};
+
 type Task = {
   id: string;
   title: string;
@@ -16,6 +23,7 @@ type Task = {
   priority: Priority;
   due: string;
   notes?: string;
+  updates?: Update[];
 };
 
 type Group = {
@@ -188,6 +196,8 @@ function MondayBoard() {
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [newBoardName, setNewBoardName] = useState("");
   const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
+  const [updateText, setUpdateText] = useState("");
+  const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
 
   useEffect(() => {
@@ -280,6 +290,40 @@ function MondayBoard() {
       ...board,
       groups: board.groups.map((g) =>
         g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g,
+      ),
+    });
+  };
+
+  const addUpdate = (groupId: string, taskId: string) => {
+    const text = updateText.trim();
+    if (!text) return;
+    const group = board.groups.find((g) => g.id === groupId);
+    const task = group?.tasks.find((t) => t.id === taskId);
+    if (!group || !task) return;
+    const update: Update = {
+      id: newId(),
+      author: updateAuthor,
+      text,
+      createdAt: new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+    };
+    updateBoard({
+      ...board,
+      groups: board.groups.map((g) =>
+        g.id === groupId
+          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: [...(t.updates ?? []), update] } : t)) }
+          : g,
+      ),
+    });
+    setUpdateText("");
+  };
+
+  const removeUpdate = (groupId: string, taskId: string, updateId: string) => {
+    updateBoard({
+      ...board,
+      groups: board.groups.map((g) =>
+        g.id === groupId
+          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: (t.updates ?? []).filter((u) => u.id !== updateId) } : t)) }
+          : g,
       ),
     });
   };
@@ -459,6 +503,7 @@ function MondayBoard() {
                               <th className="w-2 border border-slate-200" style={{ backgroundColor: group.color }} />
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="border border-slate-200 px-2 py-2 font-normal">Task</th>
+                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Person</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
                               {showPriority && <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Priority</th>}
@@ -487,6 +532,20 @@ function MondayBoard() {
                                 <td className="border border-slate-200 px-3 py-2">
                                   <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="text-left text-slate-900" title="Abrir tarefa e ver observações">
                                     {task.title || "Sem título"}
+                                  </button>
+                                </td>
+                                <td className="border border-slate-200 px-2 py-2 text-center">
+                                  <button
+                                    onClick={() => setSelected({ groupId: group.id, taskId: task.id })}
+                                    title="Abrir atualização"
+                                    className="relative mx-auto flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm"
+                                  >
+                                    💬
+                                    {(task.updates ?? []).length > 0 && (
+                                      <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-bold text-white">
+                                        {(task.updates ?? []).length}
+                                      </span>
+                                    )}
                                   </button>
                                 </td>
                                 <td className="border border-slate-200 px-2 py-2 text-center">
@@ -526,12 +585,12 @@ function MondayBoard() {
                             ))}
                             <tr>
                               <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
-                              <td colSpan={showPriority ? 7 : 6} className="border border-slate-200 px-3 py-2">
+                              <td colSpan={showPriority ? 8 : 7} className="border border-slate-200 px-3 py-2">
                                 <button onClick={() => addTask(group.id)} className="text-slate-500">+ Add Task</button>
                               </td>
                             </tr>
                             <tr>
-                              <td colSpan={4} className="border border-slate-200" />
+                              <td colSpan={5} className="border border-slate-200" />
                               <td className="border border-slate-200 px-2 py-2">
                                 <div className="flex h-4 w-full overflow-hidden">
                                   {STATUSES.map((s) => {
@@ -578,6 +637,9 @@ function MondayBoard() {
                         onDragEnd={() => setDragTask(null)}
                       >
                         <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="text-left font-semibold text-slate-900" title="Abrir tarefa e ver observações">{t.title}</button>
+                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} title="Abrir atualização" className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                          💬 Atualização{(t.updates ?? []).length > 0 ? ` (${(t.updates ?? []).length})` : ""}
+                        </button>
                         <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due) || "Sem prazo"}</p>
                         <div className="mt-2 flex gap-2">
                           <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: PRIORITY_BG[t.priority] }}>{t.priority}</span>
@@ -595,46 +657,81 @@ function MondayBoard() {
           )}
 
           {(() => {
-            const selGroup = selected ? board.groups.find((g) => g.id === selected.groupId) : undefined;
+            // Procura pela tarefa em qualquer grupo, para o card não fechar
+            // quando ela mudar de grupo ao ser concluída.
+            const selGroup = selected ? board.groups.find((g) => g.tasks.some((t) => t.id === selected.taskId)) : undefined;
             const selTask = selGroup?.tasks.find((t) => t.id === selected?.taskId);
             if (!selected || !selGroup || !selTask) return null;
+            const updates = selTask.updates ?? [];
             return (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelected(null)}>
-                <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <h2 className="text-lg font-bold text-slate-900">Detalhes da tarefa</h2>
+              <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={() => setSelected(null)}>
+                <div className="flex h-full w-full max-w-md flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">Atualização</h2>
+                      <p className="text-sm text-slate-500">Grupo: {selGroup.name}</p>
+                    </div>
                     <button onClick={() => setSelected(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold">Fechar ✕</button>
                   </div>
-                  <label className="mb-3 block text-sm font-semibold">Título
-                    <input value={selTask.title} onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
-                  </label>
-                  <div className="mb-3 grid grid-cols-2 gap-3">
-                    <label className="block text-sm font-semibold">Responsável
-                      <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                  <div className="flex-1 overflow-y-auto p-5">
+                    <label className="mb-3 block text-sm font-semibold">Tarefa
+                      <input value={selTask.title} onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
                     </label>
-                    <label className="block text-sm font-semibold">Status
-                      <select value={selTask.status} onChange={(e) => updateTask(selGroup.id, selTask.id, { status: e.target.value as Status })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
-                    </label>
-                    <label className="block text-sm font-semibold">Prioridade
-                      <select value={selTask.priority} onChange={(e) => updateTask(selGroup.id, selTask.id, { priority: e.target.value as Priority })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}</select>
-                    </label>
-                    <label className="block text-sm font-semibold">Prazo
-                      <input type="date" value={selTask.due} onChange={(e) => updateTask(selGroup.id, selTask.id, { due: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal" />
-                    </label>
+                    <div className="mb-5 grid grid-cols-2 gap-3">
+                      <label className="block text-sm font-semibold">Responsável
+                        <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                      </label>
+                      <label className="block text-sm font-semibold">Status
+                        <select value={selTask.status} onChange={(e) => updateTask(selGroup.id, selTask.id, { status: e.target.value as Status })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}</select>
+                      </label>
+                      <label className="block text-sm font-semibold">Prioridade
+                        <select value={selTask.priority} onChange={(e) => updateTask(selGroup.id, selTask.id, { priority: e.target.value as Priority })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{PRIORITIES.map((pr) => <option key={pr} value={pr}>{pr}</option>)}</select>
+                      </label>
+                      <label className="block text-sm font-semibold">Prazo
+                        <input type="date" value={selTask.due} onChange={(e) => updateTask(selGroup.id, selTask.id, { due: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal" />
+                      </label>
+                    </div>
+                    <h3 className="mb-3 font-bold">Observações — como um bate-papo</h3>
+                    {updates.length === 0 ? (
+                      <p className="mb-4 rounded-md bg-slate-50 p-3 text-sm text-slate-500">Nenhuma atualização ainda. Escreva a primeira observação abaixo.</p>
+                    ) : (
+                      <div className="mb-4 flex flex-col gap-3">
+                        {updates.map((u) => (
+                          <div key={u.id} className="flex gap-2">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold">{u.author[0]}</span>
+                            <div className="flex-1 rounded-lg border border-slate-200 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-bold">{u.author}</p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400">{u.createdAt}</span>
+                                  <button onClick={() => removeUpdate(selGroup.id, selTask.id, u.id)} className="text-xs text-slate-400 hover:text-red-600" aria-label="Excluir atualização">✕</button>
+                                </div>
+                              </div>
+                              <p className="mt-1 whitespace-pre-wrap text-sm">{u.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => {
+                        removeTask(selGroup.id, selTask.id);
+                        setSelected(null);
+                      }}
+                      className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                    >
+                      Excluir tarefa
+                    </button>
                   </div>
-                  <label className="mb-4 block text-sm font-semibold">Observações
-                    <textarea value={selTask.notes ?? ""} onChange={(e) => updateTask(selGroup.id, selTask.id, { notes: e.target.value })} rows={5} placeholder="Escreva aqui as observações dessa tarefa..." className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
-                  </label>
-                  <p className="mb-4 text-xs text-slate-500">Grupo: {selGroup.name} · Na tela principal aparece só o título; as observações ficam aqui dentro.</p>
-                  <button
-                    onClick={() => {
-                      removeTask(selGroup.id, selTask.id);
-                      setSelected(null);
-                    }}
-                    className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                  >
-                    Excluir tarefa
-                  </button>
+                  <div className="border-t border-slate-200 p-4">
+                    <label className="mb-2 block text-sm font-semibold">Quem está escrevendo?
+                      <select value={updateAuthor} onChange={(e) => setUpdateAuthor(e.target.value)} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                    </label>
+                    <textarea value={updateText} onChange={(e) => setUpdateText(e.target.value)} rows={3} placeholder="Escreva uma atualização..." className="w-full rounded-md border px-3 py-2 text-sm" />
+                    <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="mt-2 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+                      Enviar atualização
+                    </button>
+                  </div>
                 </div>
               </div>
             );
