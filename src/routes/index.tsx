@@ -98,17 +98,72 @@ function exampleBoard(): Board {
   };
 }
 
-const STORAGE_KEY = "sistema2-monday-v1";
+const STORAGE_KEY = "sistema2-monday-v2";
+
+function pendenciasBoard(): Board {
+  const urgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Crítica", due: "" });
+  const lessUrgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Baixa", due: "" });
+  const done = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "Concluído", priority: "Média", due: "" });
+  return {
+    id: newId(),
+    name: "Pendências do Sistema",
+    groups: [
+      {
+        id: newId(),
+        name: "Urgentes",
+        color: "#dc2626",
+        tasks: [
+          urgent("Transferência de créditos e diárias"),
+          urgent("Criar Caixas dos Usuários da recepção e reservas"),
+          urgent("Opção de lançar consumo, serviços e pgmts para todos os integrantes da reserva"),
+          urgent("Ajustar o sistema para contabilizar a comissão dos vendedores dos bares."),
+          urgent("Relatórios: Receita por pdv, Receita de taxas de serviço, Consumos lançados, Comissão vendedores, Movimentação de estoque, Requisições feitas, Descontos e estornos feitos, recebimentos feitos."),
+          urgent("Criar a opção de cortesia e uso da casa"),
+          urgent("Permitindo checkin sem pgmt"),
+          urgent("Relatório de recebimentos para os auditores"),
+          urgent("Emprestimo/Cauçao de pulseiras e toalhas"),
+          urgent("Requisição do almoxarifado ir direto para o compras. Não ter que ajustar o estoque para liberar para mandar para o compras."),
+          urgent("Criar o Portal do contador"),
+        ],
+      },
+      {
+        id: newId(),
+        name: "Menos urgentes",
+        color: "#eab308",
+        tasks: [
+          lessUrgent("Opção de lançar pagamento Cortesia e Uso da Casa"),
+          lessUrgent("Botão de 360 dias para o Painel de Compras"),
+          lessUrgent("Diretório já puxar as informações dos hospedes e não precisar cadastrar"),
+          lessUrgent("Alterar o item lançado na conta do hospede para não precisar estornar"),
+          lessUrgent("Informações de crianças no resumo, e faxetaria de crianças"),
+          lessUrgent("Criar a opção de bloqueio e saída do inventario"),
+          lessUrgent("Conversão de produtos na base do sistema para aceitar alterar unidade de medida"),
+          lessUrgent("Tirar a opçao de forma de pagamento e parcelamento do cadastro do fornecedor."),
+          lessUrgent("Distrinchar mais no modulo Resultado linha por linha, com a nota fiscal. Ainda não dá pra identificar"),
+        ],
+      },
+      {
+        id: newId(),
+        name: "Resolvidos",
+        color: "#059669",
+        tasks: [
+          done("Opção de pagamento A Faturar – Ok"),
+          done("Painel de Pedidos para os bares - Ok"),
+        ],
+      },
+    ],
+  };
+}
 
 function loadBoards(): Board[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [exampleBoard()];
+    if (!raw) return [pendenciasBoard(), exampleBoard()];
     const parsed = JSON.parse(raw) as Board[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [exampleBoard()];
+    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()];
     return parsed;
   } catch {
-    return [exampleBoard()];
+    return [pendenciasBoard(), exampleBoard()];
   }
 }
 
