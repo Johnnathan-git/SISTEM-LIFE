@@ -320,6 +320,9 @@ function MondayBoard() {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
+  // A flag do início da linha é seleção para excluir em lote, NÃO é "concluído".
+  // Concluir é pelo Status, que aí sim move a tarefa para Resolvidos.
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loaded = loadBoards();
@@ -331,6 +334,10 @@ function MondayBoard() {
     setEditingUpdateId(null);
     setEditingUpdateText("");
   }, [selected?.taskId]);
+
+  useEffect(() => {
+    setSelectedTaskIds(new Set());
+  }, [boardId]);
 
   useEffect(() => {
     if (boards.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
@@ -485,6 +492,30 @@ function MondayBoard() {
         g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g,
       ),
     });
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
+  };
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const deleteSelectedTasks = () => {
+    if (selectedTaskIds.size === 0) return;
+    if (!window.confirm(`Excluir ${selectedTaskIds.size} tarefa(s) selecionada(s)?`)) return;
+    updateBoard({
+      ...board,
+      groups: board.groups.map((g) => ({ ...g, tasks: g.tasks.filter((t) => !selectedTaskIds.has(t.id)) })),
+    });
+    setSelectedTaskIds(new Set());
   };
 
   const addUpdate = (groupId: string, taskId: string) => {
@@ -813,6 +844,11 @@ function MondayBoard() {
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
+            {selectedTaskIds.size > 0 && (
+              <button onClick={deleteSelectedTasks} className="rounded-md bg-red-50 px-3 py-2 font-semibold text-red-700">
+                Excluir selecionadas ({selectedTaskIds.size})
+              </button>
+            )}
           </div>
 
           {view === "table" ? (
@@ -884,9 +920,9 @@ function MondayBoard() {
                                 <td className="border border-slate-200 px-2 py-2 text-center">
                                   <input
                                     type="checkbox"
-                                    checked={task.status === "Concluído"}
-                                    onChange={(e) => updateTask(group.id, task.id, { status: e.target.checked ? "Concluído" : "A fazer" })}
-                                    aria-label="Marcar como concluída"
+                                    checked={selectedTaskIds.has(task.id)}
+                                    onChange={() => toggleTaskSelection(task.id)}
+                                    aria-label="Selecionar tarefa"
                                   />
                                 </td>
                                 <td className="border border-slate-200 px-3 py-2">
