@@ -263,7 +263,7 @@ function unifyTaskGroups(board: Board): Board {
     .map((g) => (g.name === "Resolvidos" ? { ...g, name: "Concluídas" } : g));
   const merged = existing
     ? { ...existing, tasks: [...existing.tasks, ...mergedTasks] }
-    : { id: urgentGroups[0].id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
+    : { id: urgentGroups[0]?.id ?? newId(), name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
   return { ...board, groups: [merged, ...rest] };
 }
 
