@@ -929,20 +929,6 @@ function MondayBoard() {
                                 <button onClick={() => addTask(group.id)} className="text-slate-500">+ Adicionar Tarefa</button>
                               </td>
                             </tr>
-                            <tr>
-                              <td colSpan={5} className="border border-slate-200" />
-                              <td className="border border-slate-200 px-2 py-2">
-                                <div className="flex h-4 w-full overflow-hidden">
-                                  {STATUSES.map((s) => {
-                                    const count = group.tasks.filter((t) => t.status === s).length;
-                                    if (!count || !group.tasks.length) return null;
-                                    return <div key={s} title={`${s}: ${count}`} style={{ width: `${(count / group.tasks.length) * 100}%`, backgroundColor: STATUS_BG[s] }} />;
-                                  })}
-                                </div>
-                              </td>
-                              <td className="border border-slate-200" />
-                              <td colSpan={2} className="border border-slate-200" />
-                            </tr>
                           </tbody>
                         </table>
                       </div>
