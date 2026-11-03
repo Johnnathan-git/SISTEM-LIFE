@@ -41,19 +41,20 @@ const PRIORITY_ORDER: Record<Priority, number> = {
   Baixa: 3,
 };
 
-const STATUS_STYLE: Record<Status, string> = {
-  "A fazer": "bg-slate-200 text-slate-800",
-  Trabalhando: "bg-orange-500 text-white",
-  "Em revisão": "bg-violet-500 text-white",
-  Concluído: "bg-emerald-500 text-white",
-  Travado: "bg-red-500 text-white",
+// Cores no estilo Monday: a cor vai no fundo da etiqueta, o texto da tarefa fica escuro.
+const STATUS_BG: Record<Status, string> = {
+  "A fazer": "#c4c4c4",
+  Trabalhando: "#fdab3d",
+  "Em revisão": "#a25ddc",
+  Concluído: "#00c875",
+  Travado: "#e2445c",
 };
 
-const PRIORITY_STYLE: Record<Priority, string> = {
-  Crítica: "bg-red-600 text-white",
-  Alta: "bg-orange-500 text-white",
-  Média: "bg-sky-500 text-white",
-  Baixa: "bg-slate-400 text-white",
+const PRIORITY_BG: Record<Priority, string> = {
+  Crítica: "#e2445c",
+  Alta: "#fdab3d",
+  Média: "#579bfc",
+  Baixa: "#c4c4c4",
 };
 
 function newId() {
@@ -81,7 +82,7 @@ function exampleBoard(): Board {
       {
         id: newId(),
         name: "Esta semana",
-        color: "#2563eb",
+        color: "#579bfc",
         tasks: [
           { id: newId(), title: "Revisar relatório mensal", owner: "Johnnathan", status: "Trabalhando", priority: "Alta", due: "2026-11-06" },
           { id: newId(), title: "Organizar documentos do mês", owner: "", status: "A fazer", priority: "Média", due: "2026-11-07" },
@@ -91,7 +92,7 @@ function exampleBoard(): Board {
       {
         id: newId(),
         name: "Próximas",
-        color: "#059669",
+        color: "#a25ddc",
         tasks: [
           { id: newId(), title: "Planejar a próxima semana", owner: "", status: "A fazer", priority: "Baixa", due: "" },
           { id: newId(), title: "Revisar orçamento", owner: "", status: "Em revisão", priority: "Alta", due: "2026-11-12" },
@@ -114,7 +115,7 @@ function pendenciasBoard(): Board {
       {
         id: newId(),
         name: "Urgentes",
-        color: "#dc2626",
+        color: "#e2445c",
         tasks: [
           urgent("Transferência de créditos e diárias"),
           urgent("Criar Caixas dos Usuários da recepção e reservas"),
@@ -132,7 +133,7 @@ function pendenciasBoard(): Board {
       {
         id: newId(),
         name: "Menos urgentes",
-        color: "#eab308",
+        color: "#fdab3d",
         tasks: [
           lessUrgent("Opção de lançar pagamento Cortesia e Uso da Casa"),
           lessUrgent("Botão de 360 dias para o Painel de Compras"),
@@ -148,7 +149,7 @@ function pendenciasBoard(): Board {
       {
         id: newId(),
         name: "Resolvidos",
-        color: "#059669",
+        color: "#00c875",
         tasks: [
           done("Opção de pagamento A Faturar – Ok"),
           done("Painel de Pedidos para os bares - Ok"),
@@ -171,8 +172,8 @@ function loadBoards(): Board[] {
 }
 
 function formatDate(value: string) {
-  if (!value) return "Sem prazo";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
+  if (!value) return "";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
 function MondayBoard() {
@@ -180,8 +181,11 @@ function MondayBoard() {
   const [boardId, setBoardId] = useState<string>("");
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
+  const [personFilter, setPersonFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
   const [sortByPriority, setSortByPriority] = useState(true);
+  const [showPriority, setShowPriority] = useState(true);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
   const [newBoardName, setNewBoardName] = useState("");
   const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
@@ -207,7 +211,6 @@ function MondayBoard() {
     const source = board.groups.find((g) => g.id === groupId);
     const task = source?.tasks.find((t) => t.id === taskId);
     if (!source || !task) return;
-    // Concluir = descer automaticamente para o grupo de concluídas/resolvidas.
     if (patch.status === "Concluído" && source.name !== "Resolvidos" && source.name !== "Concluídas") {
       const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
       const moved = { ...task, ...patch };
@@ -225,7 +228,7 @@ function MondayBoard() {
           ...board,
           groups: [
             ...board.groups.map((g) => (g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g)),
-            { id: newId(), name: "Resolvidos", color: "#059669", tasks: [moved] },
+            { id: newId(), name: "Resolvidos", color: "#00c875", tasks: [moved] },
           ],
         });
       }
@@ -284,20 +287,17 @@ function MondayBoard() {
   const addGroup = () => {
     updateBoard({
       ...board,
-      groups: [...board.groups, { id: newId(), name: "Novo grupo", color: "#7c3aed", tasks: [newTask()] }],
+      groups: [...board.groups, { id: newId(), name: "Novo grupo", color: "#a25ddc", tasks: [newTask()] }],
     });
   };
 
   const allTasks = board.groups.flatMap((g) => g.tasks.map((t) => ({ ...t, groupId: g.id })));
-  const done = allTasks.filter((t) => t.status === "Concluído").length;
-  const today = new Date().toISOString().slice(0, 10);
-  const overdue = allTasks.filter((t) => t.due && t.due < today && t.status !== "Concluído").length;
-  const critical = allTasks.filter((t) => t.priority === "Crítica" && t.status !== "Concluído").length;
 
   const matches = (t: Task) => {
     const bySearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.owner.toLowerCase().includes(search.toLowerCase());
     const byStatus = statusFilter === "Todos" || t.status === statusFilter;
-    return bySearch && byStatus;
+    const byPerson = personFilter === "Todos" || t.owner === personFilter;
+    return bySearch && byStatus && byPerson;
   };
 
   const orderedTasks = (tasks: Task[]) => {
@@ -311,32 +311,36 @@ function MondayBoard() {
     });
   };
 
-  const visibleTasks = useMemo(() => allTasks.filter(matches), [boards, boardId, search, statusFilter]);
+  const visibleTasks = useMemo(() => allTasks.filter(matches), [boards, boardId, search, statusFilter, personFilter]);
 
   const createBoard = () => {
     const name = newBoardName.trim() || "Novo quadro";
-    const next = { id: newId(), name, groups: [{ id: newId(), name: "A fazer", color: "#2563eb", tasks: [newTask("Primeira tarefa")] }] };
+    const next = { id: newId(), name, groups: [{ id: newId(), name: "A fazer", color: "#579bfc", tasks: [newTask("Primeira tarefa")] }] };
     setBoards((prev) => [...prev, next]);
     setBoardId(next.id);
     setNewBoardName("");
   };
 
+  const toggleCollapse = (groupId: string) => {
+    setCollapsed((prev) => (prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]));
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-white text-slate-900">
       <div className="flex min-h-screen">
-        <aside className="hidden w-60 shrink-0 flex-col gap-4 bg-slate-900 p-4 text-white md:flex">
+        <aside className="hidden w-56 shrink-0 flex-col gap-5 border-r border-slate-200 bg-white p-4 md:flex">
           <div>
             <p className="text-lg font-bold">Sistema 2</p>
-            <p className="text-xs text-slate-400">Quadros de tarefas, estilo Monday</p>
+            <p className="text-xs text-slate-500">Quadros de tarefas</p>
           </div>
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Quadros</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quadros</p>
             <div className="flex flex-col gap-1">
               {boards.map((b) => (
                 <button
                   key={b.id}
                   onClick={() => setBoardId(b.id)}
-                  className={`rounded-md px-3 py-2 text-left text-sm ${b.id === board.id ? "bg-slate-700 ring-1 ring-slate-500" : "hover:bg-slate-800"}`}
+                  className={`rounded-md px-3 py-2 text-left text-sm ${b.id === board.id ? "bg-slate-100 font-semibold" : "hover:bg-slate-50"}`}
                 >
                   {b.name}
                 </button>
@@ -344,11 +348,11 @@ function MondayBoard() {
             </div>
           </div>
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Usuários</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Usuários</p>
             <div className="flex flex-col gap-1">
               {USERS.map((u) => (
-                <span key={u} className="flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-600 text-xs font-bold">{u[0]}</span>
+                <span key={u} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-bold">{u[0]}</span>
                   {u}
                 </span>
               ))}
@@ -359,72 +363,80 @@ function MondayBoard() {
               value={newBoardName}
               onChange={(e) => setNewBoardName(e.target.value)}
               placeholder="Nome do novo quadro"
-              className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
             />
-            <button onClick={createBoard} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-200">
+            <button onClick={createBoard} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
               + Novo quadro
             </button>
-            <p className="text-xs leading-relaxed text-slate-400">
-              Os dados ficam salvos neste navegador. Depois dá para ligar a um banco de dados, se quiser.
-            </p>
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <main className="min-w-0 flex-1 px-6 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <input
                 value={board.name}
                 onChange={(e) => updateBoard({ ...board, name: e.target.value })}
-                className="w-full bg-transparent text-2xl font-bold text-slate-900 outline-none md:w-auto"
+                className="w-full bg-transparent text-3xl font-bold text-slate-900 outline-none md:w-auto"
                 aria-label="Nome do quadro"
               />
-              <p className="text-sm text-slate-500">Organize por prioridade, responsável, status e prazo.</p>
+              <p className="mt-1 text-sm text-slate-500">Organize por prioridade, responsável, status e prazo.</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setView("table")} className={`rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold ${view === "table" ? "bg-slate-900 text-white" : "bg-white"}`}>
-                Tabela
-              </button>
-              <button onClick={() => setView("kanban")} className={`rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold ${view === "kanban" ? "bg-slate-900 text-white" : "bg-white"}`}>
-                Kanban
-              </button>
+            <div className="flex items-center gap-2">
+              {USERS.map((u) => (
+                <span key={u} title={u} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-sm font-bold">{u[0]}</span>
+              ))}
             </div>
           </div>
 
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Total de tarefas</p><p className="text-2xl font-bold">{allTasks.length}</p></div>
-            <div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Concluídas</p><p className="text-2xl font-bold text-emerald-600">{done}</p></div>
-            <div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Atrasadas</p><p className="text-2xl font-bold text-red-600">{overdue}</p></div>
-            <div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Críticas abertas</p><p className="text-2xl font-bold text-orange-600">{critical}</p></div>
-          </div>
-
-          <div className="mb-4 flex flex-wrap gap-2">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar tarefa ou responsável..."
-              className="min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "Todos" | Status)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
-              <option value="Todos">Todos os status</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button onClick={() => setSortByPriority((v) => !v)} className={`rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold ${sortByPriority ? "bg-slate-900 text-white" : "bg-white"}`}>
-              {sortByPriority ? "Ordenado por prioridade ✓" : "Ordenar por prioridade"}
+          <div className="mt-4 flex items-center gap-4 border-b border-slate-200 text-sm">
+            <button onClick={() => setView("table")} className={`border-b-2 px-1 pb-2 font-semibold ${view === "table" ? "border-slate-900" : "border-transparent text-slate-500"}`}>
+              Main Table
             </button>
-            <button onClick={addGroup} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">+ Novo grupo</button>
+            <button onClick={() => setView("kanban")} className={`border-b-2 px-1 pb-2 ${view === "kanban" ? "border-slate-900 font-semibold" : "border-transparent text-slate-500"}`}>
+              Kanban
+            </button>
+            <button onClick={addGroup} className="px-1 pb-2 text-slate-500">+</button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+            <button onClick={() => addTask(board.groups[0]?.id ?? "")} className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white">
+              New Task
+            </button>
+            <label className="flex items-center gap-1">
+              <span>⌕</span>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" className="w-32 outline-none" />
+            </label>
+            <label className="flex items-center gap-1">
+              <span>👤</span>
+              <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="bg-transparent outline-none">
+                <option value="Todos">Person</option>
+                {USERS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              <span>▽</span>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "Todos" | Status)} className="bg-transparent outline-none">
+                <option value="Todos">Filter</option>
+                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+            <button onClick={() => setSortByPriority((v) => !v)} className="flex items-center gap-1">
+              ↕ Sort{sortByPriority ? " ✓" : ""}
+            </button>
+            <button onClick={() => setShowPriority((v) => !v)} className="flex items-center gap-1">
+              👁 Hide{showPriority ? "" : " (prioridade oculta)"}
+            </button>
           </div>
 
           {view === "table" ? (
-            <div className="flex flex-col gap-6">
+            <div className="mt-6 flex flex-col gap-10">
               {board.groups.map((group) => {
                 const tasks = orderedTasks(group.tasks);
-                const groupDone = group.tasks.filter((t) => t.status === "Concluído").length;
-                const progress = group.tasks.length ? Math.round((groupDone / group.tasks.length) * 100) : 0;
+                const isCollapsed = collapsed.includes(group.id);
                 return (
                   <section
                     key={group.id}
-                    className="overflow-hidden rounded-xl bg-white shadow-sm"
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
@@ -434,49 +446,118 @@ function MondayBoard() {
                       }
                     }}
                   >
-                    <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: group.color }} />
-                      <input value={group.name} onChange={(e) => updateBoard({ ...board, groups: board.groups.map((g) => (g.id === group.id ? { ...g, name: e.target.value } : g)) })} className="font-bold outline-none" aria-label="Nome do grupo" />
-                      <span className="text-xs text-slate-500">{group.tasks.length} tarefas · {progress}% concluído</span>
-                      <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{ width: `${progress}%` }} /></div>
-                      <button onClick={() => addTask(group.id)} className="ml-auto rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white">+ Nova tarefa</button>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[760px] text-left text-sm">
-                        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                          <tr><th className="px-4 py-2">Tarefa</th><th className="px-4 py-2">Responsável</th><th className="px-4 py-2">Status</th><th className="px-4 py-2">Prioridade</th><th className="px-4 py-2">Prazo</th><th className="px-4 py-2" /></tr>
-                        </thead>
-                        <tbody>
-                          {tasks.map((task) => (
-                            <tr
-                              key={task.id}
-                              className="border-t hover:bg-slate-50"
-                              draggable
-                              onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
-                              onDragEnd={() => setDragTask(null)}
-                            >
-                              <td className="px-4 py-2"><button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="rounded px-1 py-0.5 text-left font-medium text-slate-900 hover:bg-slate-100" title="Abrir tarefa e ver observações">{task.title || "Sem título"}</button></td>
-                              <td className="px-4 py-2"><select value={task.owner} onChange={(e) => updateTask(group.id, task.id, { owner: e.target.value })} className="rounded-md border px-1 py-1 text-sm"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select></td>
-                              <td className="px-4 py-2"><select value={task.status} onChange={(e) => updateTask(group.id, task.id, { status: e.target.value as Status })} className={`rounded-full px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status]}`}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
-                              <td className="px-4 py-2"><select value={task.priority} onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })} className={`rounded-full px-2 py-1 text-xs font-semibold ${PRIORITY_STYLE[task.priority]}`}>{PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}</select></td>
-                              <td className="px-4 py-2"><input type="date" value={task.due} onChange={(e) => updateTask(group.id, task.id, { due: e.target.value })} className="outline-none" /></td>
-                              <td className="px-4 py-2 text-right"><button onClick={() => removeTask(group.id, task.id)} className="text-slate-400 hover:text-red-600" aria-label="Excluir tarefa">✕</button></td>
+                    <button onClick={() => toggleCollapse(group.id)} className="mb-2 flex items-center gap-2 text-lg font-semibold" style={{ color: group.color }}>
+                      <span className="text-sm text-slate-500">{isCollapsed ? "›" : "⌄"}</span>
+                      {group.name}
+                      <span className="text-sm font-normal text-slate-400">({group.tasks.length})</span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[820px] border-collapse text-sm">
+                          <thead>
+                            <tr className="text-slate-700">
+                              <th className="w-2 border border-slate-200" style={{ backgroundColor: group.color }} />
+                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
+                              <th className="border border-slate-200 px-2 py-2 font-normal">Task</th>
+                              <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Person</th>
+                              <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
+                              {showPriority && <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Priority</th>}
+                              <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Date</th>
+                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal">+</th>
                             </tr>
-                          ))}
-                          {tasks.length === 0 && <tr><td colSpan={6} className="px-4 py-4 text-center text-slate-500">Nenhuma tarefa com esse filtro.</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {tasks.map((task) => (
+                              <tr
+                                key={task.id}
+                                className="hover:bg-slate-50"
+                                draggable
+                                onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
+                                onDragEnd={() => setDragTask(null)}
+                              >
+                                <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
+                                <td className="border border-slate-200 px-2 py-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={task.status === "Concluído"}
+                                    onChange={(e) => updateTask(group.id, task.id, { status: e.target.checked ? "Concluído" : "A fazer" })}
+                                    aria-label="Marcar como concluída"
+                                  />
+                                </td>
+                                <td className="border border-slate-200 px-3 py-2">
+                                  <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="text-left text-slate-900" title="Abrir tarefa e ver observações">
+                                    {task.title || "Sem título"}
+                                  </button>
+                                </td>
+                                <td className="border border-slate-200 px-2 py-2 text-center">
+                                  <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} title={task.owner || "Sem responsável"} className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-bold">
+                                    {task.owner ? task.owner[0] : "○"}
+                                  </button>
+                                </td>
+                                <td className="border border-slate-200 p-0">
+                                  <select
+                                    value={task.status}
+                                    onChange={(e) => updateTask(group.id, task.id, { status: e.target.value as Status })}
+                                    className="w-full appearance-none px-2 py-2.5 text-center font-medium text-white outline-none"
+                                    style={{ backgroundColor: STATUS_BG[task.status] }}
+                                  >
+                                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </td>
+                                {showPriority && (
+                                  <td className="border border-slate-200 p-0">
+                                    <select
+                                      value={task.priority}
+                                      onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })}
+                                      className="w-full appearance-none px-2 py-2.5 text-center font-medium text-white outline-none"
+                                      style={{ backgroundColor: PRIORITY_BG[task.priority] }}
+                                    >
+                                      {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                  </td>
+                                )}
+                                <td className="border border-slate-200 px-2 py-2 text-center text-slate-500">
+                                  <input type="date" value={task.due} onChange={(e) => updateTask(group.id, task.id, { due: e.target.value })} className="bg-transparent text-center outline-none" />
+                                </td>
+                                <td className="border border-slate-200 px-2 py-2 text-center">
+                                  <button onClick={() => removeTask(group.id, task.id)} className="text-slate-400 hover:text-red-600" aria-label="Excluir tarefa">✕</button>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr>
+                              <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
+                              <td colSpan={showPriority ? 7 : 6} className="border border-slate-200 px-3 py-2">
+                                <button onClick={() => addTask(group.id)} className="text-slate-500">+ Add Task</button>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td colSpan={4} className="border border-slate-200" />
+                              <td className="border border-slate-200 px-2 py-2">
+                                <div className="flex h-4 w-full overflow-hidden">
+                                  {STATUSES.map((s) => {
+                                    const count = group.tasks.filter((t) => t.status === s).length;
+                                    if (!count || !group.tasks.length) return null;
+                                    return <div key={s} title={`${s}: ${count}`} style={{ width: `${(count / group.tasks.length) * 100}%`, backgroundColor: STATUS_BG[s] }} />;
+                                  })}
+                                </div>
+                              </td>
+                              {showPriority && <td className="border border-slate-200" />}
+                              <td colSpan={2} className="border border-slate-200" />
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </section>
                 );
               })}
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               {STATUSES.map((status) => (
                 <section
                   key={status}
-                  className="rounded-xl bg-slate-200/60 p-3"
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-3"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -486,20 +567,20 @@ function MondayBoard() {
                     }
                   }}
                 >
-                  <h3 className="mb-3 font-bold">{status}</h3>
+                  <h3 className="mb-3 font-bold text-slate-900">{status}</h3>
                   <div className="flex flex-col gap-2">
                     {visibleTasks.filter((t) => t.status === status).map((t) => (
                       <article
                         key={t.id}
-                        className="rounded-lg bg-white p-3 shadow-sm"
+                        className="rounded-lg border border-slate-200 bg-white p-3"
                         draggable
                         onDragStart={() => setDragTask({ groupId: t.groupId, taskId: t.id })}
                         onDragEnd={() => setDragTask(null)}
                       >
-                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="rounded px-1 py-0.5 text-left font-semibold text-slate-900 hover:bg-slate-100" title="Abrir tarefa e ver observações">{t.title}</button>
-                        <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due)}</p>
+                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="text-left font-semibold text-slate-900" title="Abrir tarefa e ver observações">{t.title}</button>
+                        <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due) || "Sem prazo"}</p>
                         <div className="mt-2 flex gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>
+                          <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: PRIORITY_BG[t.priority] }}>{t.priority}</span>
                           <select value={t.status} onChange={(e) => updateTask(t.groupId, t.id, { status: e.target.value as Status })} className="rounded-md border px-1 py-0.5 text-xs">
                             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
@@ -521,7 +602,7 @@ function MondayBoard() {
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelected(null)}>
                 <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
                   <div className="mb-4 flex items-start justify-between gap-3">
-                    <h2 className="text-lg font-bold">Detalhes da tarefa</h2>
+                    <h2 className="text-lg font-bold text-slate-900">Detalhes da tarefa</h2>
                     <button onClick={() => setSelected(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold">Fechar ✕</button>
                   </div>
                   <label className="mb-3 block text-sm font-semibold">Título
