@@ -285,15 +285,31 @@ function pendenciasBoard(): Board {
   };
 }
 
+// Teste: unifica Urgentes + Menos urgentes em "Grupo de Tarefas" e deixa só
+// "Concluídas" separada. Não muda prioridade nem status de nenhuma tarefa.
+function unifyTaskGroups(board: Board): Board {
+  const urgentGroups = board.groups.filter((g) => g.name === "Urgentes" || g.name === "Menos urgentes");
+  if (urgentGroups.length === 0) return board;
+  const existing = board.groups.find((g) => g.name === "Grupo de Tarefas");
+  const mergedTasks = urgentGroups.flatMap((g) => g.tasks);
+  const rest = board.groups
+    .filter((g) => g.name !== "Urgentes" && g.name !== "Menos urgentes" && g.name !== "Grupo de Tarefas")
+    .map((g) => (g.name === "Resolvidos" ? { ...g, name: "Concluídas" } : g));
+  const merged = existing
+    ? { ...existing, tasks: [...existing.tasks, ...mergedTasks] }
+    : { id: urgentGroups[0].id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
+  return { ...board, groups: [merged, ...rest] };
+}
+
 function loadBoards(): Board[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [pendenciasBoard(), exampleBoard()];
+    if (!raw) return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
     const parsed = JSON.parse(raw) as Board[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()];
-    return parsed;
+    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
+    return parsed.map(unifyTaskGroups);
   } catch {
-    return [pendenciasBoard(), exampleBoard()];
+    return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
   }
 }
 
@@ -418,7 +434,7 @@ function MondayBoard() {
           ...board,
           groups: [
             ...board.groups.map((g) => (g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g)),
-            { id: newId(), name: "Resolvidos", color: "#00c875", tasks: [moved] },
+            { id: newId(), name: "Concluídas", color: "#00c875", tasks: [moved] },
           ],
         });
       }
