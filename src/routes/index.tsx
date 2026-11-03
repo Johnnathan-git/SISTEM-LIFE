@@ -846,7 +846,7 @@ function MondayBoard() {
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
                               <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>
                               <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Data</th>
-                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal">+</th>
+                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                             </tr>
                           </thead>
                           <tbody>
