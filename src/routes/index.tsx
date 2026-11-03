@@ -286,6 +286,24 @@ function MondayBoard() {
       }
       return;
     }
+    // Prioridade manda no grupo: Crítica sobe para Urgentes, Baixa vai para Menos urgentes.
+    // Só vale se o quadro tiver esse grupo e a tarefa não estiver concluída.
+    if (patch.priority && patch.status !== "Concluído" && task.status !== "Concluído") {
+      const targetName = patch.priority === "Crítica" ? "Urgentes" : patch.priority === "Baixa" ? "Menos urgentes" : null;
+      const target = targetName ? board.groups.find((g) => g.name === targetName) : undefined;
+      if (target && target.id !== groupId) {
+        const moved = { ...task, ...patch };
+        updateBoard({
+          ...board,
+          groups: board.groups.map((g) => {
+            if (g.id === groupId) return { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) };
+            if (g.id === target.id) return { ...g, tasks: [moved, ...g.tasks] };
+            return g;
+          }),
+        });
+        return;
+      }
+    }
     updateBoard({
       ...board,
       groups: board.groups.map((g) =>
@@ -437,6 +455,13 @@ function MondayBoard() {
     }
   };
 
+  const deleteGroup = (groupId: string) => {
+    const group = board.groups.find((g) => g.id === groupId);
+    if (!group) return;
+    if (group.tasks.length > 0 && !window.confirm(`Excluir o grupo "${group.name}" com ${group.tasks.length} tarefa(s)?`)) return;
+    updateBoard({ ...board, groups: board.groups.filter((g) => g.id !== groupId) });
+  };
+
   const addTaskWithStatus = (status: Status) => {
     if (status === "Concluído") {
       const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
@@ -557,7 +582,6 @@ function MondayBoard() {
             <button onClick={() => setView("kanban")} className={`border-b-2 px-1 pb-2 ${view === "kanban" ? "border-slate-900 font-semibold" : "border-transparent text-slate-500"}`}>
               Kanban
             </button>
-            <button onClick={addGroup} className="px-1 pb-2 text-slate-500">+ Novo grupo</button>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
@@ -611,6 +635,9 @@ function MondayBoard() {
                         style={{ color: group.color }}
                         aria-label="Nome do grupo"
                       />
+                      <button onClick={() => deleteGroup(group.id)} className="ml-auto text-xs text-slate-400 hover:text-red-600">
+                        Excluir grupo
+                      </button>
                     </div>
                     {!isCollapsed && (
                       <div className="overflow-x-auto">
