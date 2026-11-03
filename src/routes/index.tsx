@@ -399,6 +399,8 @@ function MondayBoard() {
             return g;
           }),
         });
+        // Se Resolvidos estava recolhido, a tarefa "sumia" de verdade. Abre o grupo ao mover para lá.
+        setCollapsed((prev) => prev.filter((id) => id !== doneGroup.id));
       } else {
         updateBoard({
           ...board,
@@ -458,13 +460,20 @@ function MondayBoard() {
         return g;
       }),
     });
+    if (dest.name === "Resolvidos" || dest.name === "Concluídas") {
+      setCollapsed((prev) => prev.filter((id) => id !== toGroupId));
+    }
   };
 
   const addTask = (groupId: string) => {
+    const target = board.groups.find((g) => g.id === groupId);
+    // Resolvidos só guarda tarefa concluída: criar ali já nasce concluída, em vez de um "A fazer" perdido no grupo errado.
+    const task = newTask();
+    if (target && (target.name === "Resolvidos" || target.name === "Concluídas")) task.status = "Concluído";
     updateBoard({
       ...board,
       groups: board.groups.map((g) =>
-        g.id === groupId ? { ...g, tasks: [...g.tasks, newTask()] } : g,
+        g.id === groupId ? { ...g, tasks: [...g.tasks, task] } : g,
       ),
     });
   };
@@ -659,6 +668,7 @@ function MondayBoard() {
       const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
       if (doneGroup) {
         updateBoard({ ...board, groups: board.groups.map((g) => (g.id === doneGroup.id ? { ...g, tasks: [...g.tasks, { ...newTask(), status }] } : g)) });
+        setCollapsed((prev) => prev.filter((id) => id !== doneGroup.id));
         return;
       }
     }
