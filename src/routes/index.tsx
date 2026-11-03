@@ -582,6 +582,9 @@ function MondayBoard() {
             <button onClick={() => setView("kanban")} className={`border-b-2 px-1 pb-2 ${view === "kanban" ? "border-slate-900 font-semibold" : "border-transparent text-slate-500"}`}>
               Kanban
             </button>
+            <button onClick={addGroup} className="border-b-2 border-transparent px-1 pb-2 text-slate-500">
+              + Novo grupo
+            </button>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
@@ -625,6 +628,14 @@ function MondayBoard() {
                     }}
                   >
                     <div className="mb-2 flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={group.color}
+                        onChange={(e) => updateBoard({ ...board, groups: board.groups.map((g) => (g.id === group.id ? { ...g, color: e.target.value } : g)) })}
+                        title="Cor do grupo"
+                        aria-label="Cor do grupo"
+                        className="h-6 w-6 cursor-pointer rounded border border-slate-200 bg-transparent p-0"
+                      />
                       <button onClick={() => toggleCollapse(group.id)} className="text-sm text-slate-500" aria-label={isCollapsed ? "Expandir grupo" : "Recolher grupo"}>
                         {isCollapsed ? "›" : "⌄"}
                       </button>
