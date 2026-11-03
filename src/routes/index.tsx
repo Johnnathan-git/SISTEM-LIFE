@@ -62,13 +62,6 @@ function Avatar({ name, className }: { name: string; className: string }) {
   }
   return <img src={src} alt={name} className={`${className} rounded-full object-cover`} />;
 }
-const PRIORITY_ORDER: Record<Priority, number> = {
-  Crítica: 0,
-  Alta: 1,
-  Média: 2,
-  Baixa: 3,
-};
-
 // Cores no estilo Monday: a cor vai no fundo da etiqueta, o texto da tarefa fica escuro.
 const STATUS_BG: Record<Status, string> = {
   "A fazer": "#c4c4c4",
@@ -200,35 +193,8 @@ function newTask(title = "Nova tarefa"): Task {
   };
 }
 
-function exampleBoard(): Board {
-  return {
-    id: newId(),
-    name: "Meu trabalho",
-    groups: [
-      {
-        id: newId(),
-        name: "Esta semana",
-        color: "#579bfc",
-        tasks: [
-          { id: newId(), title: "Revisar relatório mensal", owner: "Johnnathan", status: "Trabalhando", priority: "Alta", due: "2026-11-06" },
-          { id: newId(), title: "Organizar documentos do mês", owner: "", status: "A fazer", priority: "Média", due: "2026-11-07" },
-          { id: newId(), title: "Ligar para fornecedor", owner: "", status: "A fazer", priority: "Crítica", due: "2026-11-04" },
-        ],
-      },
-      {
-        id: newId(),
-        name: "Próximas",
-        color: "#a25ddc",
-        tasks: [
-          { id: newId(), title: "Planejar a próxima semana", owner: "", status: "A fazer", priority: "Baixa", due: "" },
-          { id: newId(), title: "Revisar orçamento", owner: "", status: "Em revisão", priority: "Alta", due: "2026-11-12" },
-        ],
-      },
-    ],
-  };
-}
-
 const STORAGE_KEY = "sistema2-monday-v3";
+const BOARD_ID_KEY = "sistema2-monday-board-id";
 
 function pendenciasBoard(): Board {
   const urgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Crítica", due: "" });
@@ -301,15 +267,25 @@ function unifyTaskGroups(board: Board): Board {
   return { ...board, groups: [merged, ...rest] };
 }
 
+// O quadro de exemplo "Meu trabalho" não é mais semente: ele voltava sozinho
+// sempre que o armazenamento era recriado (nova aba, preview, dado corrompido).
+// Se ele ainda estiver salvo, é removido aqui, desde que seja o exemplo original
+// (grupos "Esta semana" + "Próximas") e não um quadro criado pelo usuário.
+function isExampleBoard(b: Board): boolean {
+  return b.name === "Meu trabalho" && b.groups.map((g) => g.name).join(",") === "Esta semana,Próximas";
+}
+
 function loadBoards(): Board[] {
+  const fallback = () => [pendenciasBoard()].map(unifyTaskGroups);
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
+    if (!raw) return fallback();
     const parsed = JSON.parse(raw) as Board[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
-    return parsed.map(unifyTaskGroups);
+    if (!Array.isArray(parsed) || parsed.length === 0) return fallback();
+    const cleaned = parsed.filter((b) => !isExampleBoard(b)).map(unifyTaskGroups);
+    return cleaned.length > 0 ? cleaned : fallback();
   } catch {
-    return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
+    return fallback();
   }
 }
 
@@ -319,8 +295,9 @@ function formatDate(value: string) {
 }
 
 function MondayBoard() {
-  const [boards, setBoards] = useState<Board[]>(() => [exampleBoard()]);
+  const [boards, setBoards] = useState<Board[]>([]);
   const [boardId, setBoardId] = useState<string>("");
+  const [boardsLoaded, setBoardsLoaded] = useState(false);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
@@ -346,7 +323,14 @@ function MondayBoard() {
   useEffect(() => {
     const loaded = loadBoards();
     setBoards(loaded);
-    setBoardId(loaded[0].id);
+    let savedBoardId: string | null = null;
+    try {
+      savedBoardId = localStorage.getItem(BOARD_ID_KEY);
+    } catch {
+      savedBoardId = null;
+    }
+    setBoardId(savedBoardId && loaded.some((b) => b.id === savedBoardId) ? savedBoardId : (loaded[0]?.id ?? ""));
+    setBoardsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -361,8 +345,28 @@ function MondayBoard() {
   }, [boardId]);
 
   useEffect(() => {
-    if (boards.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
-  }, [boards]);
+    // Nunca salva antes de carregar: antes disso, boards era só um placeholder
+    // ([exemplo]) e esse salvamento de montagem sobrescrevia exclusões do usuário.
+    if (!boardsLoaded) return;
+    if (boards.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+      } catch {
+        // Quota do navegador (muitos prints em base64): não derruba o app;
+        // os dados continuam na tela e o próximo salvamento tenta de novo.
+        console.warn("Não foi possível salvar os quadros no navegador (armazenamento cheio).");
+      }
+    }
+  }, [boards, boardsLoaded]);
+
+  useEffect(() => {
+    if (!boardsLoaded || !boardId) return;
+    try {
+      localStorage.setItem(BOARD_ID_KEY, boardId);
+    } catch {
+      // Sem persistência de aba: o quadro volta para o primeiro na próxima abertura.
+    }
+  }, [boardId, boardsLoaded]);
 
 
   const wrapSelection = (before: string, after: string) => {
@@ -391,7 +395,7 @@ function MondayBoard() {
   };
 
   const board = boards.find((b) => b.id === boardId) ?? boards[0];
-  if (!board) return null;
+  if (!board) return <div className="min-h-screen bg-white p-6 text-slate-500">Carregando quadros…</div>;
 
   const updateBoard = (next: Board) => {
     setBoards((prev) => prev.map((b) => (b.id === next.id ? next : b)));
@@ -469,7 +473,19 @@ function MondayBoard() {
   };
 
   const moveTaskToGroup = (fromGroupId: string, taskId: string, toGroupId: string) => {
-    if (fromGroupId === toGroupId) return;
+    if (fromGroupId === toGroupId) {
+      // Soltar na área do próprio grupo: vai para o fim dele, em vez de não fazer nada.
+      const group = board.groups.find((g) => g.id === fromGroupId);
+      const task = group?.tasks.find((t) => t.id === taskId);
+      if (!group || !task) return;
+      updateBoard({
+        ...board,
+        groups: board.groups.map((g) =>
+          g.id === fromGroupId ? { ...g, tasks: [...g.tasks.filter((t) => t.id !== taskId), task] } : g,
+        ),
+      });
+      return;
+    }
     const source = board.groups.find((g) => g.id === fromGroupId);
     const dest = board.groups.find((g) => g.id === toGroupId);
     const task = source?.tasks.find((t) => t.id === taskId);
@@ -833,8 +849,8 @@ function MondayBoard() {
         button:focus-visible { outline: 2px solid #0073ea; outline-offset: 2px; }
         button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
       `}</style>
-      <div className="flex min-h-screen">
-        <aside className="hidden w-56 shrink-0 flex-col gap-5 border-r border-slate-200 bg-white p-4 md:flex">
+      <div className="flex min-h-screen flex-col md:flex-row">
+        <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-slate-200 bg-white p-4 md:w-56 md:border-b-0 md:border-r">
           <div className="flex items-center gap-2">
             <MondayLogo />
             <div>
