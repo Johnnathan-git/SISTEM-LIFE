@@ -154,6 +154,17 @@ function ColorDropdown({
   );
 }
 
+// Logo Monday: duas barras inclinadas (rosa e amarela) + ponto verde.
+function MondayLogo() {
+  return (
+    <svg viewBox="0 0 100 70" aria-label="Monday 2.0" className="h-8 w-auto shrink-0">
+      <rect x="14" y="8" width="26" height="54" rx="13" fill="#f02d5a" transform="rotate(24 27 35)" />
+      <rect x="48" y="8" width="26" height="54" rx="13" fill="#ffcc00" transform="rotate(24 61 35)" />
+      <circle cx="84" cy="54" r="14" fill="#00c875" />
+    </svg>
+  );
+}
+
 function newId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -676,9 +687,12 @@ function MondayBoard() {
     <div className="min-h-screen bg-white text-slate-900">
       <div className="flex min-h-screen">
         <aside className="hidden w-56 shrink-0 flex-col gap-5 border-r border-slate-200 bg-white p-4 md:flex">
-          <div>
-            <p className="text-lg font-bold">Sistema 2</p>
-            <p className="text-xs text-slate-500">Quadros de tarefas</p>
+          <div className="flex items-center gap-2">
+            <MondayLogo />
+            <div>
+              <p className="text-lg font-bold">Monday 2.0</p>
+              <p className="text-xs text-slate-500">Quadros de tarefas</p>
+            </div>
           </div>
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quadros</p>
