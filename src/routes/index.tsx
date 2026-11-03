@@ -14,6 +14,7 @@ type Update = {
   text: string;
   createdAt: string;
   attachments?: { name: string; dataUrl: string; type: string }[];
+  edited?: boolean;
 };
 
 type Task = {
@@ -282,6 +283,8 @@ function MondayBoard() {
   const [newBoardName, setNewBoardName] = useState("");
   const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
   const [updateText, setUpdateText] = useState("");
+  const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
+  const [editingUpdateText, setEditingUpdateText] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
   const [showDetails, setShowDetails] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
@@ -294,6 +297,11 @@ function MondayBoard() {
     setBoards(loaded);
     setBoardId(loaded[0].id);
   }, []);
+
+  useEffect(() => {
+    setEditingUpdateId(null);
+    setEditingUpdateText("");
+  }, [selected?.taskId]);
 
   useEffect(() => {
     if (boards.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
@@ -513,6 +521,21 @@ function MondayBoard() {
         reader.readAsDataURL(file);
       }
     });
+  };
+
+  const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    updateBoard({
+      ...board,
+      groups: board.groups.map((g) =>
+        g.id === groupId
+          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: (t.updates ?? []).map((u) => (u.id === updateId ? { ...u, text: trimmed, edited: true } : u)) } : t)) }
+          : g,
+      ),
+    });
+    setEditingUpdateId(null);
+    setEditingUpdateText("");
   };
 
   const removeUpdate = (groupId: string, taskId: string, updateId: string) => {
@@ -1039,10 +1062,48 @@ function MondayBoard() {
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-bold">{u.author}</p>
-                                  <span className="text-xs text-slate-400">{u.createdAt}</span>
+                                  <span className="text-xs text-slate-400">{u.createdAt}{u.edited ? " · editado" : ""}</span>
+                                  <button
+                                    onClick={() => {
+                                      setEditingUpdateId(u.id);
+                                      setEditingUpdateText(u.text);
+                                    }}
+                                    className="text-xs text-slate-500 hover:text-slate-900"
+                                    aria-label="Editar atualização"
+                                  >
+                                    Editar
+                                  </button>
                                   <button onClick={() => removeUpdate(selGroup.id, selTask.id, u.id)} className="text-xs text-slate-400 hover:text-red-600" aria-label="Excluir atualização">✕</button>
                                 </div>
-                                <p className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm">{u.text}</p>
+                                {editingUpdateId === u.id ? (
+                                  <div className="mt-1">
+                                    <textarea
+                                      value={editingUpdateText}
+                                      onChange={(e) => setEditingUpdateText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.ctrlKey && e.key === "Enter") editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText);
+                                      }}
+                                      rows={3}
+                                      className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none"
+                                    />
+                                    <div className="mt-2 flex gap-2">
+                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white">
+                                        Salvar
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setEditingUpdateId(null);
+                                          setEditingUpdateText("");
+                                        }}
+                                        className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600"
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm">{u.text}</p>
+                                )}
                                 {(u.attachments ?? []).length > 0 && (
                                   <div className="mt-2 flex flex-wrap gap-2">
                                     {(u.attachments ?? []).map((att, ai) => (
