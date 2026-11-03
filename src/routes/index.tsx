@@ -286,6 +286,7 @@ function MondayBoard() {
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
   const [editingUpdateText, setEditingUpdateText] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -451,7 +452,8 @@ function MondayBoard() {
 
   const addUpdate = (groupId: string, taskId: string) => {
     const text = updateText.trim();
-    if (!text) return;
+    // Um print sozinho, sem texto, também tem que salvar. Antes isso voltava sem fazer nada.
+    if (!text && pendingAttachments.length === 0) return;
     const group = board.groups.find((g) => g.id === groupId);
     const task = group?.tasks.find((t) => t.id === taskId);
     if (!group || !task) return;
@@ -474,18 +476,7 @@ function MondayBoard() {
     setPendingAttachments([]);
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const files: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].kind === "file") {
-        const file = items[i].getAsFile();
-        if (file) files.push(file);
-      }
-    }
-    if (files.length === 0) return;
-    e.preventDefault();
+  const addAttachmentsFromFiles = (files: File[]) => {
     files.forEach((file) => {
       if (file.type.startsWith("image/")) {
         const url = URL.createObjectURL(file);
@@ -510,6 +501,16 @@ function MondayBoard() {
           }
           URL.revokeObjectURL(url);
         };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === "string") {
+              setPendingAttachments((prev) => [...prev, { name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type }]);
+            }
+          };
+          reader.readAsDataURL(file);
+        };
         img.src = url;
       } else {
         const reader = new FileReader();
@@ -521,6 +522,26 @@ function MondayBoard() {
         reader.readAsDataURL(file);
       }
     });
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    const files: File[] = [];
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+    // Alguns navegadores entregam o arquivo em clipboardData.files, não em items.
+    if (files.length === 0 && e.clipboardData?.files?.length) {
+      files.push(...Array.from(e.clipboardData.files));
+    }
+    if (files.length === 0) return;
+    e.preventDefault();
+    addAttachmentsFromFiles(files);
   };
 
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
@@ -1042,7 +1063,23 @@ function MondayBoard() {
                         </div>
                       )}
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-slate-500">Cole uma imagem ou arquivo direto no texto que ele fica salvo na atualização. Ctrl+Enter envia.</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            ref={attachInputRef}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              addAttachmentsFromFiles(Array.from(e.target.files ?? []));
+                              e.target.value = "";
+                            }}
+                          />
+                          <button onClick={() => attachInputRef.current?.click()} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600">
+                            📎 Anexar print/arquivo
+                          </button>
+                          <p className="text-xs text-slate-500">Ou cole o print no texto. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
+                        </div>
                         <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
                           Atualizar
                         </button>
