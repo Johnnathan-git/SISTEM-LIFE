@@ -66,6 +66,93 @@ const PRIORITY_BG: Record<Priority, string> = {
   Baixa: "#c4c4c4",
 };
 
+// Lista de cores própria, em vez de <select> nativo: o seletor do navegador
+// mostra as opções sem cor, só o valor selecionado ficava colorido.
+// Aqui cada opção já nasce com a sua cor de fundo.
+function ColorDropdown({
+  value,
+  options,
+  colors,
+  onChange,
+  ariaLabel,
+  buttonClassName,
+}: {
+  value: string;
+  options: string[];
+  colors: Record<string, string>;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  buttonClassName: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open ]);
+
+  const menuHeight = options.length * 36;
+  const top = rect
+    ? rect.bottom + menuHeight > window.innerHeight
+      ? Math.max(8, rect.top - menuHeight - 2)
+      : rect.bottom + 2
+    : 0;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => {
+          if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+          setOpen((v) => !v);
+        }}
+        aria-label={ariaLabel}
+        className={buttonClassName}
+        style={{ backgroundColor: colors[value] }}
+      >
+        {value} ▾
+      </button>
+      {open && rect && (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] overflow-hidden rounded-md shadow-lg"
+          style={{ top, left: rect.left, width: Math.max(rect.width, 150) }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+              className="block w-full px-3 py-2 text-center text-sm font-medium text-white hover:opacity-90"
+              style={{ backgroundColor: colors[opt] }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function newId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -713,24 +800,24 @@ function MondayBoard() {
                                   </button>
                                 </td>
                                 <td className="border border-slate-200 p-0">
-                                  <select
+                                  <ColorDropdown
                                     value={task.status}
-                                    onChange={(e) => updateTask(group.id, task.id, { status: e.target.value as Status })}
-                                    className="w-full appearance-none px-2 py-2.5 text-center font-medium text-white outline-none"
-                                    style={{ backgroundColor: STATUS_BG[task.status] }}
-                                  >
-                                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                                  </select>
+                                    options={STATUSES}
+                                    colors={STATUS_BG}
+                                    onChange={(v) => updateTask(group.id, task.id, { status: v as Status })}
+                                    ariaLabel="Status da tarefa"
+                                    buttonClassName="w-full px-2 py-2.5 text-center font-medium text-white outline-none"
+                                  />
                                 </td>
                                 <td className="border border-slate-200 p-0">
-                                  <select
+                                  <ColorDropdown
                                     value={task.priority}
-                                    onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })}
-                                    className="w-full appearance-none px-2 py-2.5 text-center font-medium text-white outline-none"
-                                    style={{ backgroundColor: PRIORITY_BG[task.priority] }}
-                                  >
-                                    {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                                  </select>
+                                    options={PRIORITIES}
+                                    colors={PRIORITY_BG}
+                                    onChange={(v) => updateTask(group.id, task.id, { priority: v as Priority })}
+                                    ariaLabel="Prioridade da tarefa"
+                                    buttonClassName="w-full px-2 py-2.5 text-center font-medium text-white outline-none"
+                                  />
                                 </td>
                                 <td className="border border-slate-200 px-2 py-2 text-center text-slate-500">
                                   <input type="date" value={task.due} onChange={(e) => updateTask(group.id, task.id, { due: e.target.value })} className="bg-transparent text-center outline-none" />
@@ -806,9 +893,14 @@ function MondayBoard() {
                         <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due) || "Sem prazo"}</p>
                         <div className="mt-2 flex gap-2">
                           <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: PRIORITY_BG[t.priority] }}>{t.priority}</span>
-                          <select value={t.status} onChange={(e) => updateTask(t.groupId, t.id, { status: e.target.value as Status })} className="rounded-md border px-1 py-0.5 text-xs">
-                            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                          <ColorDropdown
+                            value={t.status}
+                            options={STATUSES}
+                            colors={STATUS_BG}
+                            onChange={(v) => updateTask(t.groupId, t.id, { status: v as Status })}
+                            ariaLabel="Status da tarefa"
+                            buttonClassName="rounded-md px-2 py-1 text-xs font-medium text-white"
+                          />
                         </div>
                       </article>
                     ))}
@@ -847,10 +939,10 @@ function MondayBoard() {
                           <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
                         </label>
                         <label className="block text-sm font-semibold">Status
-                          <select value={selTask.status} onChange={(e) => updateTask(selGroup.id, selTask.id, { status: e.target.value as Status })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}</select>
+                          <ColorDropdown value={selTask.status} options={STATUSES} colors={STATUS_BG} onChange={(v) => updateTask(selGroup.id, selTask.id, { status: v as Status })} ariaLabel="Status da tarefa" buttonClassName="mt-1 w-full rounded-md px-2 py-2 text-center font-medium text-white" />
                         </label>
                         <label className="block text-sm font-semibold">Prioridade
-                          <select value={selTask.priority} onChange={(e) => updateTask(selGroup.id, selTask.id, { priority: e.target.value as Priority })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{PRIORITIES.map((pr) => <option key={pr} value={pr}>{pr}</option>)}</select>
+                          <ColorDropdown value={selTask.priority} options={PRIORITIES} colors={PRIORITY_BG} onChange={(v) => updateTask(selGroup.id, selTask.id, { priority: v as Priority })} ariaLabel="Prioridade da tarefa" buttonClassName="mt-1 w-full rounded-md px-2 py-2 text-center font-medium text-white" />
                         </label>
                         <label className="block text-sm font-semibold">Prazo
                           <input type="date" value={selTask.due} onChange={(e) => updateTask(selGroup.id, selTask.id, { due: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal" />
