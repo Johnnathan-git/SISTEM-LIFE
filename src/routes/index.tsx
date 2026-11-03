@@ -805,6 +805,18 @@ function MondayBoard() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
+      <style>{`
+        button {
+          cursor: pointer;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+          transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, transform 0.1s ease;
+        }
+        button:hover { filter: brightness(0.96); }
+        button:active { transform: scale(0.97); }
+        button:focus-visible { outline: 2px solid #0073ea; outline-offset: 2px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+      `}</style>
       <div className="flex min-h-screen">
         <aside className="hidden w-56 shrink-0 flex-col gap-5 border-r border-slate-200 bg-white p-4 md:flex">
           <div className="flex items-center gap-2">
@@ -890,7 +902,7 @@ function MondayBoard() {
                 if (board.groups[0]) addTask(board.groups[0].id);
                 else addGroup();
               }}
-              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white"
+              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white hover:bg-[#0060c8]"
             >
               Nova Tarefa
             </button>
@@ -1292,7 +1304,7 @@ function MondayBoard() {
                       )}
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <p className="text-xs text-slate-500">Cole o print aqui na conversa (Ctrl+V) que ele anexa sozinho. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
-                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
+                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0060c8]">
                           Atualizar
                         </button>
                       </div>
@@ -1351,7 +1363,7 @@ function MondayBoard() {
                                       </div>
                                     )}
                                     <div className="mt-2 flex gap-2">
-                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white">
+                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#0060c8]">
                                         Salvar
                                       </button>
                                       <button
