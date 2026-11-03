@@ -13,6 +13,7 @@ type Update = {
   author: string;
   text: string;
   createdAt: string;
+  attachments?: { name: string; dataUrl: string; type: string }[];
 };
 
 type Task = {
@@ -197,7 +198,7 @@ function MondayBoard() {
   const [newBoardName, setNewBoardName] = useState("");
   const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
   const [updateText, setUpdateText] = useState("");
-  const [updateTab, setUpdateTab] = useState<"updates" | "files" | "activity">("updates");
+  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
   const [showDetails, setShowDetails] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -214,9 +215,6 @@ function MondayBoard() {
     if (boards.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
   }, [boards]);
 
-  useEffect(() => {
-    if (selected) setUpdateTab("updates");
-  }, [selected?.taskId]);
 
   const wrapSelection = (before: string, after: string) => {
     const el = editorRef.current;
@@ -338,6 +336,7 @@ function MondayBoard() {
       author: updateAuthor,
       text,
       createdAt: new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      attachments: pendingAttachments,
     };
     updateBoard({
       ...board,
@@ -348,6 +347,56 @@ function MondayBoard() {
       ),
     });
     setUpdateText("");
+    setPendingAttachments([]);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") {
+        const file = items[i].getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length === 0) return;
+    e.preventDefault();
+    files.forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          const max = 1200;
+          let w = img.width;
+          let h = img.height;
+          if (Math.max(w, h) > max) {
+            const scale = max / Math.max(w, h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            setPendingAttachments((prev) => [...prev, { name: file.name || "imagem.jpg", dataUrl, type: "image/jpeg" }]);
+          }
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setPendingAttachments((prev) => [...prev, { name: file.name, dataUrl: reader.result as string, type: file.type }]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
   };
 
   const removeUpdate = (groupId: string, taskId: string, updateId: string) => {
@@ -694,11 +743,6 @@ function MondayBoard() {
             const selTask = selGroup?.tasks.find((t) => t.id === selected?.taskId);
             if (!selected || !selGroup || !selTask) return null;
             const updates = [...(selTask.updates ?? [])].reverse();
-            const tabs = [
-              { id: "updates", label: "Atualizações" },
-              { id: "files", label: "Arquivos" },
-              { id: "activity", label: "Registro de Atividades" },
-            ] as const;
             return (
               <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={() => setSelected(null)}>
                 <div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -743,21 +787,9 @@ function MondayBoard() {
                       </button>
                     </div>
                   )}
-                  <div className="flex items-center gap-5 overflow-x-auto border-b border-slate-200 px-6 text-sm">
-                    {tabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setUpdateTab(tab.id)}
-                        className={`whitespace-nowrap border-b-2 pb-2 ${updateTab === tab.id ? "border-[#0073ea] font-semibold text-slate-900" : "border-transparent text-slate-500"}`}
-                      >
-                        {tab.id === "updates" ? "🏠 Atualizações" : tab.label}
-                      </button>
-                    ))}
-                    <button className="whitespace-nowrap pb-2 text-slate-400">+</button>
-                  </div>
                   <p className="px-6 pt-2 text-right text-xs text-slate-400">✉ Atualizar via e-mail &nbsp;·&nbsp; Dar feedback</p>
 
-                  {updateTab === "updates" && (
+                  {(
                     <div className="flex-1 overflow-y-auto px-6 py-4">
                       <div className="mb-3 flex items-center gap-2 text-sm">
                         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 font-bold">{updateAuthor[0]}</span>
@@ -786,6 +818,10 @@ function MondayBoard() {
                             setCursorPos(e.target.selectionStart ?? e.target.value.length);
                           }}
                           onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
+                          onPaste={handlePaste}
+                          onKeyDown={(e) => {
+                            if (e.ctrlKey && e.key === "Enter") addUpdate(selGroup.id, selTask.id);
+                          }}
                           rows={4}
                           placeholder="Escreva uma atualização..."
                           className="w-full resize-none px-4 py-3 text-sm outline-none"
@@ -802,23 +838,28 @@ function MondayBoard() {
                             </div>
                           </div>
                         )}
-                        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-                          <div className="flex items-center gap-3 text-sm text-slate-500">
-                            <button onClick={() => {
-                              setUpdateText((prev) => `${prev}@`);
-                              setCursorPos(updateText.length + 1);
-                              setTimeout(() => editorRef.current?.focus(), 0);
-                            }}>@ Mencionar</button>
-                            <span>📎</span>
-                            <span>😊</span>
-                            <span>✨</span>
-                          </div>
-                          <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
-                            Atualizar ⌄
-                          </button>
-                        </div>
                       </div>
 
+                      {pendingAttachments.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {pendingAttachments.map((att, i) => (
+                            <div key={i} className="relative rounded-md border border-slate-200 p-1">
+                              {att.type.startsWith("image") ? (
+                                <img src={att.dataUrl} alt={att.name} className="h-20 w-auto rounded" />
+                              ) : (
+                                <span className="text-sm">{att.name}</span>
+                              )}
+                              <button onClick={() => setPendingAttachments((prev) => prev.filter((_, idx) => idx !== i))} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs text-white" aria-label="Remover anexo">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-xs text-slate-500">Cole uma imagem ou arquivo direto no texto que ele fica salvo na atualização. Ctrl+Enter envia.</p>
+                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
+                          Atualizar
+                        </button>
+                      </div>
 
                       {updates.length === 0 ? (
                         <div className="mt-8 text-center">
@@ -838,27 +879,22 @@ function MondayBoard() {
                                   <button onClick={() => removeUpdate(selGroup.id, selTask.id, u.id)} className="text-xs text-slate-400 hover:text-red-600" aria-label="Excluir atualização">✕</button>
                                 </div>
                                 <p className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm">{u.text}</p>
+                                {(u.attachments ?? []).length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {(u.attachments ?? []).map((att, ai) => (
+                                      att.type.startsWith("image") ? (
+                                        <img key={ai} src={att.dataUrl} alt={att.name} className="max-h-48 rounded-md border border-slate-200" />
+                                      ) : (
+                                        <a key={ai} href={att.dataUrl} download={att.name} className="text-sm underline">{att.name}</a>
+                                      )
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {updateTab === "files" && (
-                    <div className="flex-1 px-6 py-6 text-center text-sm text-slate-500">
-                      <p className="text-lg font-bold text-slate-900">Nenhum arquivo ainda</p>
-                      <p className="mt-1">Arquivos enviados nas atualizações aparecerão aqui.</p>
-                    </div>
-                  )}
-
-                  {updateTab === "activity" && (
-                    <div className="flex-1 px-6 py-6 text-sm text-slate-600">
-                      <p className="font-bold text-slate-900">Registro de Atividades</p>
-                      <p className="mt-2">Tarefa criada no quadro {board.name}, grupo {selGroup.name}.</p>
-                      <p className="mt-1">Status atual: {selTask.status} · Prioridade: {selTask.priority} · Responsável: {selTask.owner || "Sem responsável"}.</p>
-                      <p className="mt-1">Atualizações neste item: {updates.length}.</p>
                     </div>
                   )}
 
