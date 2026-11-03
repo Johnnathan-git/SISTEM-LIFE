@@ -286,7 +286,6 @@ function MondayBoard() {
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
   const [editingUpdateText, setEditingUpdateText] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
-  const attachInputRef = useRef<HTMLInputElement | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -524,7 +523,13 @@ function MondayBoard() {
     });
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
+  // lugar do card anexa o print, sem precisar estar com o cursor dentro da caixa
+  // de texto e sem botão de anexar. Antes só funcionava colando dentro do textarea.
+  const handleWindowPaste = (e: ClipboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    // Não rouba o colar da edição de uma atualização já postada.
+    if (target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...") return;
     const items = e.clipboardData?.items;
     const files: File[] = [];
     if (items) {
@@ -539,10 +544,37 @@ function MondayBoard() {
     if (files.length === 0 && e.clipboardData?.files?.length) {
       files.push(...Array.from(e.clipboardData.files));
     }
-    if (files.length === 0) return;
-    e.preventDefault();
-    addAttachmentsFromFiles(files);
+    if (files.length > 0) {
+      e.preventDefault();
+      addAttachmentsFromFiles(files);
+      return;
+    }
+    // Último recurso: se o clipboard diz que tem imagem mas o evento não a entregou,
+    // tenta ler direto do clipboard (pode pedir permissão ao navegador).
+    if (e.clipboardData?.types?.some((t) => t.startsWith("image/"))) {
+      void (async () => {
+        try {
+          const clipboardItems = await navigator.clipboard.read();
+          for (const item of clipboardItems) {
+            for (const type of item.types) {
+              if (type.startsWith("image/")) {
+                const blob = await item.getType(type);
+                addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
+              }
+            }
+          }
+        } catch {
+          // Sem permissão ou sem imagem: deixa o colar normal seguir.
+        }
+      })();
+    }
   };
+
+  useEffect(() => {
+    if (!selected) return;
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
+  }, [selected?.taskId]);
 
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
     const trimmed = text.trim();
@@ -1026,7 +1058,6 @@ function MondayBoard() {
                             setCursorPos(e.target.selectionStart ?? e.target.value.length);
                           }}
                           onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
-                          onPaste={handlePaste}
                           onKeyDown={(e) => {
                             if (e.ctrlKey && e.key === "Enter") addUpdate(selGroup.id, selTask.id);
                           }}
@@ -1063,23 +1094,7 @@ function MondayBoard() {
                         </div>
                       )}
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <input
-                            ref={attachInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={(e) => {
-                              addAttachmentsFromFiles(Array.from(e.target.files ?? []));
-                              e.target.value = "";
-                            }}
-                          />
-                          <button onClick={() => attachInputRef.current?.click()} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600">
-                            📎 Anexar print/arquivo
-                          </button>
-                          <p className="text-xs text-slate-500">Ou cole o print no texto. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
-                        </div>
+                        <p className="text-xs text-slate-500">Cole o print aqui na conversa (Ctrl+V) que ele anexa sozinho. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
                         <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
                           Atualizar
                         </button>
