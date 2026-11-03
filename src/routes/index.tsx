@@ -1333,9 +1333,9 @@ function MondayBoard() {
                                   <div className="mt-2 flex flex-wrap gap-2">
                                     {(u.attachments ?? []).map((att, ai) => (
                                       att.type.startsWith("image") ? (
-                                        <div key={ai} className="flex flex-col gap-1">
+                                        <div key={ai} className="flex flex-col items-start gap-1">
                                           <img src={att.dataUrl} alt={att.name} className="max-h-48 rounded-md border border-slate-200" />
-                                          <a href={att.dataUrl} download={att.name} className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700">Baixar</a>
+                                          <a href={att.dataUrl} download={att.name} className="text-xs text-slate-400 underline">Baixar</a>
                                         </div>
                                       ) : (
                                         <a key={ai} href={att.dataUrl} download={att.name} className="text-sm underline">{att.name}</a>
