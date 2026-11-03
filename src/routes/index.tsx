@@ -15,6 +15,7 @@ type Task = {
   status: Status;
   priority: Priority;
   due: string;
+  notes?: string;
 };
 
 type Group = {
@@ -32,6 +33,7 @@ type Board = {
 
 const STATUSES: Status[] = ["A fazer", "Trabalhando", "Em revisão", "Concluído", "Travado"];
 const PRIORITIES: Priority[] = ["Crítica", "Alta", "Média", "Baixa"];
+const USERS = ["Johnnathan", "Emanuel"];
 const PRIORITY_ORDER: Record<Priority, number> = {
   Crítica: 0,
   Alta: 1,
@@ -67,6 +69,7 @@ function newTask(title = "Nova tarefa"): Task {
     status: "A fazer",
     priority: "Média",
     due: "",
+    notes: "",
   };
 }
 
@@ -80,7 +83,7 @@ function exampleBoard(): Board {
         name: "Esta semana",
         color: "#2563eb",
         tasks: [
-          { id: newId(), title: "Revisar relatório mensal", owner: "Robert", status: "Trabalhando", priority: "Alta", due: "2026-11-06" },
+          { id: newId(), title: "Revisar relatório mensal", owner: "Johnnathan", status: "Trabalhando", priority: "Alta", due: "2026-11-06" },
           { id: newId(), title: "Organizar documentos do mês", owner: "", status: "A fazer", priority: "Média", due: "2026-11-07" },
           { id: newId(), title: "Ligar para fornecedor", owner: "", status: "A fazer", priority: "Crítica", due: "2026-11-04" },
         ],
@@ -98,7 +101,7 @@ function exampleBoard(): Board {
   };
 }
 
-const STORAGE_KEY = "sistema2-monday-v2";
+const STORAGE_KEY = "sistema2-monday-v3";
 
 function pendenciasBoard(): Board {
   const urgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Crítica", due: "" });
@@ -180,6 +183,8 @@ function MondayBoard() {
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
   const [sortByPriority, setSortByPriority] = useState(true);
   const [newBoardName, setNewBoardName] = useState("");
+  const [selected, setSelected] = useState<{ groupId: string; taskId: string } | null>(null);
+  const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
 
   useEffect(() => {
     const loaded = loadBoards();
@@ -199,6 +204,33 @@ function MondayBoard() {
   };
 
   const updateTask = (groupId: string, taskId: string, patch: Partial<Task>) => {
+    const source = board.groups.find((g) => g.id === groupId);
+    const task = source?.tasks.find((t) => t.id === taskId);
+    if (!source || !task) return;
+    // Concluir = descer automaticamente para o grupo de concluídas/resolvidas.
+    if (patch.status === "Concluído" && source.name !== "Resolvidos" && source.name !== "Concluídas") {
+      const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
+      const moved = { ...task, ...patch };
+      if (doneGroup) {
+        updateBoard({
+          ...board,
+          groups: board.groups.map((g) => {
+            if (g.id === groupId) return { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) };
+            if (g.id === doneGroup.id) return { ...g, tasks: [...g.tasks, moved] };
+            return g;
+          }),
+        });
+      } else {
+        updateBoard({
+          ...board,
+          groups: [
+            ...board.groups.map((g) => (g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g)),
+            { id: newId(), name: "Resolvidos", color: "#059669", tasks: [moved] },
+          ],
+        });
+      }
+      return;
+    }
     updateBoard({
       ...board,
       groups: board.groups.map((g) =>
@@ -206,6 +238,28 @@ function MondayBoard() {
           ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)) }
           : g,
       ),
+    });
+  };
+
+  const moveTaskToGroup = (fromGroupId: string, taskId: string, toGroupId: string) => {
+    if (fromGroupId === toGroupId) return;
+    const source = board.groups.find((g) => g.id === fromGroupId);
+    const dest = board.groups.find((g) => g.id === toGroupId);
+    const task = source?.tasks.find((t) => t.id === taskId);
+    if (!source || !dest || !task) return;
+    const status: Status =
+      dest.name === "Resolvidos" || dest.name === "Concluídas"
+        ? "Concluído"
+        : task.status === "Concluído"
+          ? "A fazer"
+          : task.status;
+    updateBoard({
+      ...board,
+      groups: board.groups.map((g) => {
+        if (g.id === fromGroupId) return { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) };
+        if (g.id === toGroupId) return { ...g, tasks: [...g.tasks, { ...task, status }] };
+        return g;
+      }),
     });
   };
 
@@ -289,6 +343,17 @@ function MondayBoard() {
               ))}
             </div>
           </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Usuários</p>
+            <div className="flex flex-col gap-1">
+              {USERS.map((u) => (
+                <span key={u} className="flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold">{u[0]}</span>
+                  {u}
+                </span>
+              ))}
+            </div>
+          </div>
           <div className="mt-auto flex flex-col gap-2">
             <input
               value={newBoardName}
@@ -357,7 +422,18 @@ function MondayBoard() {
                 const groupDone = group.tasks.filter((t) => t.status === "Concluído").length;
                 const progress = group.tasks.length ? Math.round((groupDone / group.tasks.length) * 100) : 0;
                 return (
-                  <section key={group.id} className="overflow-hidden rounded-xl bg-white shadow-sm">
+                  <section
+                    key={group.id}
+                    className="overflow-hidden rounded-xl bg-white shadow-sm"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragTask) {
+                        moveTaskToGroup(dragTask.groupId, dragTask.taskId, group.id);
+                        setDragTask(null);
+                      }
+                    }}
+                  >
                     <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
                       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: group.color }} />
                       <input value={group.name} onChange={(e) => updateBoard({ ...board, groups: board.groups.map((g) => (g.id === group.id ? { ...g, name: e.target.value } : g)) })} className="font-bold outline-none" aria-label="Nome do grupo" />
@@ -372,9 +448,15 @@ function MondayBoard() {
                         </thead>
                         <tbody>
                           {tasks.map((task) => (
-                            <tr key={task.id} className="border-t">
-                              <td className="px-4 py-2"><input value={task.title} onChange={(e) => updateTask(group.id, task.id, { title: e.target.value })} className="w-full outline-none" /></td>
-                              <td className="px-4 py-2"><input value={task.owner} onChange={(e) => updateTask(group.id, task.id, { owner: e.target.value })} placeholder="Quem?" className="w-full outline-none" /></td>
+                            <tr
+                              key={task.id}
+                              className="border-t"
+                              draggable
+                              onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
+                              onDragEnd={() => setDragTask(null)}
+                            >
+                              <td className="px-4 py-2"><button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="text-left font-medium text-blue-700 hover:underline" title="Abrir tarefa e ver observações">{task.title || "Sem título"}</button></td>
+                              <td className="px-4 py-2"><select value={task.owner} onChange={(e) => updateTask(group.id, task.id, { owner: e.target.value })} className="rounded-md border px-1 py-1 text-sm"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select></td>
                               <td className="px-4 py-2"><select value={task.status} onChange={(e) => updateTask(group.id, task.id, { status: e.target.value as Status })} className={`rounded-full px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status]}`}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
                               <td className="px-4 py-2"><select value={task.priority} onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })} className={`rounded-full px-2 py-1 text-xs font-semibold ${PRIORITY_STYLE[task.priority]}`}>{PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}</select></td>
                               <td className="px-4 py-2"><input type="date" value={task.due} onChange={(e) => updateTask(group.id, task.id, { due: e.target.value })} className="outline-none" /></td>
@@ -392,12 +474,29 @@ function MondayBoard() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               {STATUSES.map((status) => (
-                <section key={status} className="rounded-xl bg-slate-200/60 p-3">
+                <section
+                  key={status}
+                  className="rounded-xl bg-slate-200/60 p-3"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragTask) {
+                      updateTask(dragTask.groupId, dragTask.taskId, { status });
+                      setDragTask(null);
+                    }
+                  }}
+                >
                   <h3 className="mb-3 font-bold">{status}</h3>
                   <div className="flex flex-col gap-2">
                     {visibleTasks.filter((t) => t.status === status).map((t) => (
-                      <article key={t.id} className="rounded-lg bg-white p-3 shadow-sm">
-                        <p className="font-semibold">{t.title}</p>
+                      <article
+                        key={t.id}
+                        className="rounded-lg bg-white p-3 shadow-sm"
+                        draggable
+                        onDragStart={() => setDragTask({ groupId: t.groupId, taskId: t.id })}
+                        onDragEnd={() => setDragTask(null)}
+                      >
+                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="text-left font-semibold text-blue-700 hover:underline" title="Abrir tarefa e ver observações">{t.title}</button>
                         <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due)}</p>
                         <div className="mt-2 flex gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>
@@ -413,6 +512,52 @@ function MondayBoard() {
               ))}
             </div>
           )}
+
+          {(() => {
+            const selGroup = selected ? board.groups.find((g) => g.id === selected.groupId) : undefined;
+            const selTask = selGroup?.tasks.find((t) => t.id === selected?.taskId);
+            if (!selected || !selGroup || !selTask) return null;
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelected(null)}>
+                <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <h2 className="text-lg font-bold">Detalhes da tarefa</h2>
+                    <button onClick={() => setSelected(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold">Fechar ✕</button>
+                  </div>
+                  <label className="mb-3 block text-sm font-semibold">Título
+                    <input value={selTask.title} onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
+                  </label>
+                  <div className="mb-3 grid grid-cols-2 gap-3">
+                    <label className="block text-sm font-semibold">Responsável
+                      <select value={selTask.owner} onChange={(e) => updateTask(selGroup.id, selTask.id, { owner: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                    </label>
+                    <label className="block text-sm font-semibold">Status
+                      <select value={selTask.status} onChange={(e) => updateTask(selGroup.id, selTask.id, { status: e.target.value as Status })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+                    </label>
+                    <label className="block text-sm font-semibold">Prioridade
+                      <select value={selTask.priority} onChange={(e) => updateTask(selGroup.id, selTask.id, { priority: e.target.value as Priority })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal">{PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}</select>
+                    </label>
+                    <label className="block text-sm font-semibold">Prazo
+                      <input type="date" value={selTask.due} onChange={(e) => updateTask(selGroup.id, selTask.id, { due: e.target.value })} className="mt-1 w-full rounded-md border px-2 py-2 font-normal" />
+                    </label>
+                  </div>
+                  <label className="mb-4 block text-sm font-semibold">Observações
+                    <textarea value={selTask.notes ?? ""} onChange={(e) => updateTask(selGroup.id, selTask.id, { notes: e.target.value })} rows={5} placeholder="Escreva aqui as observações dessa tarefa..." className="mt-1 w-full rounded-md border px-3 py-2 font-normal" />
+                  </label>
+                  <p className="mb-4 text-xs text-slate-500">Grupo: {selGroup.name} · Na tela principal aparece só o título; as observações ficam aqui dentro.</p>
+                  <button
+                    onClick={() => {
+                      removeTask(selGroup.id, selTask.id);
+                      setSelected(null);
+                    }}
+                    className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                  >
+                    Excluir tarefa
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </main>
       </div>
     </div>
