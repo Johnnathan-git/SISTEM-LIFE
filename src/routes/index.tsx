@@ -842,7 +842,7 @@ function MondayBoard() {
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="border border-slate-200 px-2 py-2 font-normal">Tarefa</th>
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
-                              <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Pessoa</th>
+                              <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Responsável</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
                               <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>
                               <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Data</th>
