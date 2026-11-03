@@ -295,7 +295,7 @@ function formatDate(value: string) {
 }
 
 function MondayBoard() {
-  const [boards, setBoards] = useState<Board[]>([]);
+  const [boards, setBoards] = useState<Board[]>(() => [pendenciasBoard()].map(unifyTaskGroups));
   const [boardId, setBoardId] = useState<string>("");
   const [boardsLoaded, setBoardsLoaded] = useState(false);
   const [view, setView] = useState<"table" | "kanban">("table");
@@ -393,6 +393,135 @@ function MondayBoard() {
     setCursorPos(before.length + user.length + 2);
     setTimeout(() => editorRef.current?.focus(), 0);
   };
+
+  const processAttachmentFile = (file: File, onDone: (att: { name: string; dataUrl: string; type: string }) => void) => {
+    if (file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const max = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (Math.max(w, h) > max) {
+          const scale = max / Math.max(w, h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          onDone({ name: file.name || "imagem.jpg", dataUrl: canvas.toDataURL("image/jpeg", 0.85), type: "image/jpeg" });
+        }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            onDone({ name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type });
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+      img.src = url;
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          onDone({ name: file.name, dataUrl: reader.result as string, type: file.type });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addAttachmentsFromFiles = (files: File[]) => {
+    files.forEach((file) => processAttachmentFile(file, (att) => setPendingAttachments((prev) => [...prev, att])));
+  };
+
+  const addEditAttachmentsFromFiles = (files: File[]) => {
+    files.forEach((file) => processAttachmentFile(file, (att) => setEditingAttachments((prev) => [...prev, att])));
+  };
+
+  // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
+  // lugar do card anexa o print, sem precisar estar com o cursor dentro da caixa
+  // de texto e sem botão de anexar. Antes só funcionava colando dentro do textarea.
+  const handleWindowPaste = (e: ClipboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    // Editando uma atualização já postada: colar texto segue normal, colar print
+    // anexa na própria edição (e aparece abaixo da caixa antes de Salvar).
+    const isEditTextarea = target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...";
+    if (isEditTextarea) {
+      const hasFile =
+        Array.from(e.clipboardData?.items ?? []).some((i) => i.kind === "file" || i.type.startsWith("image/")) ||
+        (e.clipboardData?.files?.length ?? 0) > 0 ||
+        (e.clipboardData?.types ?? []).some((t) => t.startsWith("image/"));
+      if (!hasFile) return;
+    }
+    const items = e.clipboardData?.items;
+    const files: File[] = [];
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+    // Alguns navegadores entregam o arquivo em clipboardData.files, não em items.
+    if (files.length === 0 && e.clipboardData?.files?.length) {
+      files.push(...Array.from(e.clipboardData.files));
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      if (isEditTextarea) addEditAttachmentsFromFiles(files);
+      else addAttachmentsFromFiles(files);
+      return;
+    }
+    // Último recurso: se o clipboard diz que tem imagem mas o evento não a entregou,
+    // tenta ler direto do clipboard (pode pedir permissão ao navegador).
+    if (e.clipboardData?.types?.some((t) => t.startsWith("image/"))) {
+      void (async () => {
+        try {
+          const clipboardItems = await navigator.clipboard.read();
+          for (const item of clipboardItems) {
+            for (const type of item.types) {
+              if (type.startsWith("image/")) {
+                const blob = await item.getType(type);
+                if (isEditTextarea) addEditAttachmentsFromFiles([new File([blob], "print.png", { type })]);
+                else addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
+              }
+            }
+          }
+        } catch {
+          // Sem permissão ou sem imagem: deixa o colar normal seguir.
+        }
+      })();
+    }
+  };
+
+  const pasteHandlerRef = useRef(handleWindowPaste);
+  pasteHandlerRef.current = handleWindowPaste;
+  useEffect(() => {
+    if (!selected) return;
+    const listener = (e: ClipboardEvent) => pasteHandlerRef.current(e);
+    window.addEventListener("paste", listener);
+    return () => window.removeEventListener("paste", listener);
+  }, [selected?.taskId]);
+
+  const visibleTasks = useMemo(() => {
+    const b = boards.find((bb) => bb.id === boardId) ?? boards[0];
+    if (!b) return [];
+    return b.groups.flatMap((g) => g.tasks.map((t) => ({ ...t, groupId: g.id }))).filter((t) => {
+      const bySearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.owner.toLowerCase().includes(search.toLowerCase());
+      const byStatus = statusFilter === "Todos" || t.status === statusFilter;
+      return bySearch && byStatus;
+    });
+  }, [boards, boardId, search, statusFilter]);
 
   const board = boards.find((b) => b.id === boardId) ?? boards[0];
   if (!board) return <div className="min-h-screen bg-white p-6 text-slate-500">Carregando quadros…</div>;
@@ -618,125 +747,6 @@ function MondayBoard() {
     setTimeout(() => editorRef.current?.focus(), 0);
   };
 
-  const processAttachmentFile = (file: File, onDone: (att: { name: string; dataUrl: string; type: string }) => void) => {
-    if (file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const max = 1200;
-        let w = img.width;
-        let h = img.height;
-        if (Math.max(w, h) > max) {
-          const scale = max / Math.max(w, h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, w, h);
-          onDone({ name: file.name || "imagem.jpg", dataUrl: canvas.toDataURL("image/jpeg", 0.85), type: "image/jpeg" });
-        }
-        URL.revokeObjectURL(url);
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === "string") {
-            onDone({ name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type });
-          }
-        };
-        reader.readAsDataURL(file);
-      };
-      img.src = url;
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          onDone({ name: file.name, dataUrl: reader.result as string, type: file.type });
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const addAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => processAttachmentFile(file, (att) => setPendingAttachments((prev) => [...prev, att])));
-  };
-
-  const addEditAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => processAttachmentFile(file, (att) => setEditingAttachments((prev) => [...prev, att])));
-  };
-
-  // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
-  // lugar do card anexa o print, sem precisar estar com o cursor dentro da caixa
-  // de texto e sem botão de anexar. Antes só funcionava colando dentro do textarea.
-  const handleWindowPaste = (e: ClipboardEvent) => {
-    const target = e.target as HTMLElement | null;
-    // Editando uma atualização já postada: colar texto segue normal, colar print
-    // anexa na própria edição (e aparece abaixo da caixa antes de Salvar).
-    const isEditTextarea = target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...";
-    if (isEditTextarea) {
-      const hasFile =
-        Array.from(e.clipboardData?.items ?? []).some((i) => i.kind === "file" || i.type.startsWith("image/")) ||
-        (e.clipboardData?.files?.length ?? 0) > 0 ||
-        (e.clipboardData?.types ?? []).some((t) => t.startsWith("image/"));
-      if (!hasFile) return;
-    }
-    const items = e.clipboardData?.items;
-    const files: File[] = [];
-    if (items) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
-          if (file) files.push(file);
-        }
-      }
-    }
-    // Alguns navegadores entregam o arquivo em clipboardData.files, não em items.
-    if (files.length === 0 && e.clipboardData?.files?.length) {
-      files.push(...Array.from(e.clipboardData.files));
-    }
-    if (files.length > 0) {
-      e.preventDefault();
-      if (isEditTextarea) addEditAttachmentsFromFiles(files);
-      else addAttachmentsFromFiles(files);
-      return;
-    }
-    // Último recurso: se o clipboard diz que tem imagem mas o evento não a entregou,
-    // tenta ler direto do clipboard (pode pedir permissão ao navegador).
-    if (e.clipboardData?.types?.some((t) => t.startsWith("image/"))) {
-      void (async () => {
-        try {
-          const clipboardItems = await navigator.clipboard.read();
-          for (const item of clipboardItems) {
-            for (const type of item.types) {
-              if (type.startsWith("image/")) {
-                const blob = await item.getType(type);
-                if (isEditTextarea) addEditAttachmentsFromFiles([new File([blob], "print.png", { type })]);
-                else addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
-              }
-            }
-          }
-        } catch {
-          // Sem permissão ou sem imagem: deixa o colar normal seguir.
-        }
-      })();
-    }
-  };
-
-  const pasteHandlerRef = useRef(handleWindowPaste);
-  pasteHandlerRef.current = handleWindowPaste;
-  useEffect(() => {
-    if (!selected) return;
-    const listener = (e: ClipboardEvent) => pasteHandlerRef.current(e);
-    window.addEventListener("paste", listener);
-    return () => window.removeEventListener("paste", listener);
-  }, [selected?.taskId]);
-
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -811,7 +821,6 @@ function MondayBoard() {
     });
   };
 
-  const allTasks = board.groups.flatMap((g) => g.tasks.map((t) => ({ ...t, groupId: g.id })));
 
   const matches = (t: Task) => {
     const bySearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.owner.toLowerCase().includes(search.toLowerCase());
@@ -821,7 +830,6 @@ function MondayBoard() {
 
   const orderedTasks = (tasks: Task[]) => tasks.filter(matches);
 
-  const visibleTasks = useMemo(() => allTasks.filter(matches), [boards, boardId, search, statusFilter]);
 
   const createBoard = () => {
     const name = newBoardName.trim() || "Novo quadro";
