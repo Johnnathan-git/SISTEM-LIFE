@@ -43,8 +43,8 @@ const PRIORITY_ORDER: Record<Priority, number> = {
 
 const STATUS_STYLE: Record<Status, string> = {
   "A fazer": "bg-slate-200 text-slate-800",
-  Trabalhando: "bg-blue-600 text-white",
-  "Em revisão": "bg-amber-400 text-slate-900",
+  Trabalhando: "bg-orange-500 text-white",
+  "Em revisão": "bg-violet-500 text-white",
   Concluído: "bg-emerald-500 text-white",
   Travado: "bg-red-500 text-white",
 };
@@ -336,7 +336,7 @@ function MondayBoard() {
                 <button
                   key={b.id}
                   onClick={() => setBoardId(b.id)}
-                  className={`rounded-md px-3 py-2 text-left text-sm ${b.id === board.id ? "bg-blue-600" : "hover:bg-slate-800"}`}
+                  className={`rounded-md px-3 py-2 text-left text-sm ${b.id === board.id ? "bg-slate-700 ring-1 ring-slate-500" : "hover:bg-slate-800"}`}
                 >
                   {b.name}
                 </button>
@@ -348,7 +348,7 @@ function MondayBoard() {
             <div className="flex flex-col gap-1">
               {USERS.map((u) => (
                 <span key={u} className="flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold">{u[0]}</span>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-600 text-xs font-bold">{u[0]}</span>
                   {u}
                 </span>
               ))}
@@ -361,7 +361,7 @@ function MondayBoard() {
               placeholder="Nome do novo quadro"
               className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
             />
-            <button onClick={createBoard} className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold hover:bg-blue-500">
+            <button onClick={createBoard} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-200">
               + Novo quadro
             </button>
             <p className="text-xs leading-relaxed text-slate-400">
@@ -376,16 +376,16 @@ function MondayBoard() {
               <input
                 value={board.name}
                 onChange={(e) => updateBoard({ ...board, name: e.target.value })}
-                className="w-full bg-transparent text-2xl font-bold outline-none md:w-auto"
+                className="w-full bg-transparent text-2xl font-bold text-slate-900 outline-none md:w-auto"
                 aria-label="Nome do quadro"
               />
               <p className="text-sm text-slate-500">Organize por prioridade, responsável, status e prazo.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setView("table")} className={`rounded-md px-3 py-2 text-sm font-semibold ${view === "table" ? "bg-slate-900 text-white" : "bg-white"}`}>
+              <button onClick={() => setView("table")} className={`rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold ${view === "table" ? "bg-slate-900 text-white" : "bg-white"}`}>
                 Tabela
               </button>
-              <button onClick={() => setView("kanban")} className={`rounded-md px-3 py-2 text-sm font-semibold ${view === "kanban" ? "bg-slate-900 text-white" : "bg-white"}`}>
+              <button onClick={() => setView("kanban")} className={`rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold ${view === "kanban" ? "bg-slate-900 text-white" : "bg-white"}`}>
                 Kanban
               </button>
             </div>
@@ -409,7 +409,7 @@ function MondayBoard() {
               <option value="Todos">Todos os status</option>
               {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button onClick={() => setSortByPriority((v) => !v)} className={`rounded-md px-3 py-2 text-sm font-semibold ${sortByPriority ? "bg-blue-600 text-white" : "bg-white"}`}>
+            <button onClick={() => setSortByPriority((v) => !v)} className={`rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold ${sortByPriority ? "bg-slate-900 text-white" : "bg-white"}`}>
               {sortByPriority ? "Ordenado por prioridade ✓" : "Ordenar por prioridade"}
             </button>
             <button onClick={addGroup} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">+ Novo grupo</button>
@@ -439,7 +439,7 @@ function MondayBoard() {
                       <input value={group.name} onChange={(e) => updateBoard({ ...board, groups: board.groups.map((g) => (g.id === group.id ? { ...g, name: e.target.value } : g)) })} className="font-bold outline-none" aria-label="Nome do grupo" />
                       <span className="text-xs text-slate-500">{group.tasks.length} tarefas · {progress}% concluído</span>
                       <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{ width: `${progress}%` }} /></div>
-                      <button onClick={() => addTask(group.id)} className="ml-auto rounded-md bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700">+ Nova tarefa</button>
+                      <button onClick={() => addTask(group.id)} className="ml-auto rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white">+ Nova tarefa</button>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[760px] text-left text-sm">
@@ -450,12 +450,12 @@ function MondayBoard() {
                           {tasks.map((task) => (
                             <tr
                               key={task.id}
-                              className="border-t"
+                              className="border-t hover:bg-slate-50"
                               draggable
                               onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
                               onDragEnd={() => setDragTask(null)}
                             >
-                              <td className="px-4 py-2"><button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="text-left font-medium text-blue-700 hover:underline" title="Abrir tarefa e ver observações">{task.title || "Sem título"}</button></td>
+                              <td className="px-4 py-2"><button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} className="rounded px-1 py-0.5 text-left font-medium text-slate-900 hover:bg-slate-100" title="Abrir tarefa e ver observações">{task.title || "Sem título"}</button></td>
                               <td className="px-4 py-2"><select value={task.owner} onChange={(e) => updateTask(group.id, task.id, { owner: e.target.value })} className="rounded-md border px-1 py-1 text-sm"><option value="">Sem responsável</option>{USERS.map((u) => <option key={u} value={u}>{u}</option>)}</select></td>
                               <td className="px-4 py-2"><select value={task.status} onChange={(e) => updateTask(group.id, task.id, { status: e.target.value as Status })} className={`rounded-full px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status]}`}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
                               <td className="px-4 py-2"><select value={task.priority} onChange={(e) => updateTask(group.id, task.id, { priority: e.target.value as Priority })} className={`rounded-full px-2 py-1 text-xs font-semibold ${PRIORITY_STYLE[task.priority]}`}>{PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}</select></td>
@@ -496,7 +496,7 @@ function MondayBoard() {
                         onDragStart={() => setDragTask({ groupId: t.groupId, taskId: t.id })}
                         onDragEnd={() => setDragTask(null)}
                       >
-                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="text-left font-semibold text-blue-700 hover:underline" title="Abrir tarefa e ver observações">{t.title}</button>
+                        <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} className="rounded px-1 py-0.5 text-left font-semibold text-slate-900 hover:bg-slate-100" title="Abrir tarefa e ver observações">{t.title}</button>
                         <p className="mt-1 text-xs text-slate-500">{t.owner || "Sem responsável"} · {formatDate(t.due)}</p>
                         <div className="mt-2 flex gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>
