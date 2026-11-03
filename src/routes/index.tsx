@@ -252,6 +252,20 @@ function MondayBoard() {
     const source = board.groups.find((g) => g.id === groupId);
     const task = source?.tasks.find((t) => t.id === taskId);
     if (!source || !task) return;
+    // Reabrir uma tarefa concluída: ela sai do grupo Resolvidos e volta para um grupo normal.
+    if (patch.status && patch.status !== "Concluído" && (source.name === "Resolvidos" || source.name === "Concluídas")) {
+      const target = board.groups.find((g) => g.name !== "Resolvidos" && g.name !== "Concluídas") ?? { id: newId(), name: "A fazer", color: "#579bfc", tasks: [] as Task[] };
+      const moved = { ...task, ...patch };
+      const groupsWithout = board.groups.map((g) => (g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g));
+      const targetExists = board.groups.some((g) => g.id === target.id);
+      updateBoard({
+        ...board,
+        groups: targetExists
+          ? groupsWithout.map((g) => (g.id === target.id ? { ...g, tasks: [...g.tasks, moved] } : g))
+          : [...groupsWithout, { ...target, tasks: [moved] }],
+      });
+      return;
+    }
     if (patch.status === "Concluído" && source.name !== "Resolvidos" && source.name !== "Concluídas") {
       const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
       const moved = { ...task, ...patch };
@@ -410,6 +424,45 @@ function MondayBoard() {
     });
   };
 
+  const deleteBoard = (id: string) => {
+    const target = boards.find((b) => b.id === id);
+    if (!target) return;
+    const total = target.groups.flatMap((g) => g.tasks).length;
+    if (total > 0 && !window.confirm(`Excluir o quadro "${target.name}" com ${total} tarefa(s)?`)) return;
+    const remaining = boards.filter((b) => b.id !== id);
+    if (remaining.length === 0) {
+      const fresh = { id: newId(), name: "Novo quadro", groups: [{ id: newId(), name: "A fazer", color: "#579bfc", tasks: [newTask("Primeira tarefa")] }] };
+      setBoards([fresh]);
+      setBoardId(fresh.id);
+    } else {
+      setBoards(remaining);
+      if (boardId === id) setBoardId(remaining[0].id);
+    }
+  };
+
+  const deleteGroup = (groupId: string) => {
+    const group = board.groups.find((g) => g.id === groupId);
+    if (!group) return;
+    if (group.tasks.length > 0 && !window.confirm(`Excluir o grupo "${group.name}" com ${group.tasks.length} tarefa(s)?`)) return;
+    updateBoard({ ...board, groups: board.groups.filter((g) => g.id !== groupId) });
+  };
+
+  const addTaskWithStatus = (status: Status) => {
+    if (status === "Concluído") {
+      const doneGroup = board.groups.find((g) => g.name === "Resolvidos" || g.name === "Concluídas");
+      if (doneGroup) {
+        updateBoard({ ...board, groups: board.groups.map((g) => (g.id === doneGroup.id ? { ...g, tasks: [...g.tasks, { ...newTask(), status }] } : g)) });
+        return;
+      }
+    }
+    const first = board.groups[0];
+    if (!first) {
+      addGroup();
+      return;
+    }
+    updateBoard({ ...board, groups: board.groups.map((g) => (g.id === first.id ? { ...g, tasks: [...g.tasks, { ...newTask(), status }] } : g)) });
+  };
+
   const addGroup = () => {
     updateBoard({
       ...board,
@@ -463,13 +516,15 @@ function MondayBoard() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quadros</p>
             <div className="flex flex-col gap-1">
               {boards.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => setBoardId(b.id)}
-                  className={`rounded-md px-3 py-2 text-left text-sm ${b.id === board.id ? "bg-slate-100 font-semibold" : "hover:bg-slate-50"}`}
-                >
-                  {b.name}
-                </button>
+                <div key={b.id} className={`flex items-center rounded-md ${b.id === board.id ? "bg-slate-100" : "hover:bg-slate-50"}`}>
+                  <button
+                    onClick={() => setBoardId(b.id)}
+                    className={`flex-1 px-3 py-2 text-left text-sm ${b.id === board.id ? "font-semibold" : ""}`}
+                  >
+                    {b.name}
+                  </button>
+                  <button onClick={() => deleteBoard(b.id)} title="Excluir quadro" aria-label={`Excluir quadro ${b.name}`} className="px-2 text-slate-400 hover:text-red-600">✕</button>
+                </div>
               ))}
             </div>
           </div>
@@ -522,11 +577,17 @@ function MondayBoard() {
             <button onClick={() => setView("kanban")} className={`border-b-2 px-1 pb-2 ${view === "kanban" ? "border-slate-900 font-semibold" : "border-transparent text-slate-500"}`}>
               Kanban
             </button>
-            <button onClick={addGroup} className="px-1 pb-2 text-slate-500">+</button>
+            <button onClick={addGroup} className="px-1 pb-2 text-slate-500">+ Novo grupo</button>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
-            <button onClick={() => addTask(board.groups[0]?.id ?? "")} className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white">
+            <button
+              onClick={() => {
+                if (board.groups[0]) addTask(board.groups[0].id);
+                else addGroup();
+              }}
+              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white"
+            >
               Nova Tarefa
             </button>
             <label className="flex items-center gap-1">
@@ -548,10 +609,10 @@ function MondayBoard() {
               </select>
             </label>
             <button onClick={() => setSortByPriority((v) => !v)} className="flex items-center gap-1">
-              ↕ Ordenar{sortByPriority ? " ✓" : ""}
+              ↕ {sortByPriority ? "Ordenar por prioridade ✓" : "Ordenar por prioridade"}
             </button>
             <button onClick={() => setShowPriority((v) => !v)} className="flex items-center gap-1">
-              👁 Ocultar{showPriority ? "" : " (prioridade oculta)"}
+              👁 {showPriority ? "Ocultar prioridade" : "Mostrar prioridade"}
             </button>
           </div>
 
@@ -572,11 +633,20 @@ function MondayBoard() {
                       }
                     }}
                   >
-                    <button onClick={() => toggleCollapse(group.id)} className="mb-2 flex items-center gap-2 text-lg font-semibold" style={{ color: group.color }}>
-                      <span className="text-sm text-slate-500">{isCollapsed ? "›" : "⌄"}</span>
-                      {group.name}
+                    <div className="mb-2 flex items-center gap-2">
+                      <button onClick={() => toggleCollapse(group.id)} className="text-sm text-slate-500" aria-label={isCollapsed ? "Expandir grupo" : "Recolher grupo"}>
+                        {isCollapsed ? "›" : "⌄"}
+                      </button>
+                      <input
+                        value={group.name}
+                        onChange={(e) => updateBoard({ ...board, groups: board.groups.map((g) => (g.id === group.id ? { ...g, name: e.target.value } : g)) })}
+                        className="bg-transparent text-lg font-semibold outline-none"
+                        style={{ color: group.color }}
+                        aria-label="Nome do grupo"
+                      />
                       <span className="text-sm font-normal text-slate-400">({group.tasks.length})</span>
-                    </button>
+                      <button onClick={() => deleteGroup(group.id)} title="Excluir grupo" aria-label={`Excluir grupo ${group.name}`} className="text-slate-400 hover:text-red-600">✕</button>
+                    </div>
                     {!isCollapsed && (
                       <div className="overflow-x-auto">
                         <table className="w-full min-w-[820px] border-collapse text-sm">
@@ -708,7 +778,7 @@ function MondayBoard() {
                     }
                   }}
                 >
-                  <h3 className="mb-3 font-bold text-slate-900">{status}</h3>
+                  <h3 className="mb-3 font-bold text-slate-900">{status} ({visibleTasks.filter((t) => t.status === status).length})</h3>
                   <div className="flex flex-col gap-2">
                     {visibleTasks.filter((t) => t.status === status).map((t) => (
                       <article
@@ -732,6 +802,9 @@ function MondayBoard() {
                       </article>
                     ))}
                     {visibleTasks.filter((t) => t.status === status).length === 0 && <p className="text-sm text-slate-500">Nenhuma tarefa aqui.</p>}
+                    <button onClick={() => addTaskWithStatus(status)} className="mt-1 rounded-md bg-white px-3 py-2 text-left text-sm text-slate-500 hover:text-slate-900">
+                      + Adicionar tarefa
+                    </button>
                   </div>
                 </section>
               ))}
@@ -748,9 +821,14 @@ function MondayBoard() {
                 <div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-start justify-between gap-3 px-6 pt-5">
                     <button onClick={() => setSelected(null)} className="text-xl text-slate-500" aria-label="Fechar">✕</button>
-                    <span className="text-slate-400">•••</span>
                   </div>
-                  <h2 className="px-6 pt-2 text-2xl font-bold text-slate-900">{selTask.title || "Sem título"}</h2>
+                  <input
+                    value={selTask.title}
+                    onChange={(e) => updateTask(selGroup.id, selTask.id, { title: e.target.value })}
+                    placeholder="Título da tarefa"
+                    aria-label="Título da tarefa"
+                    className="mx-6 mt-2 w-[calc(100%-3rem)] rounded-md border border-transparent px-2 py-1 text-2xl font-bold text-slate-900 outline-none hover:border-slate-200 focus:border-slate-400"
+                  />
                   <p className="px-6 pb-1 text-sm text-slate-500">
                     {selTask.owner || "Sem responsável"} · {selTask.status} · {selTask.priority} · {selTask.due ? formatDate(selTask.due) : "Sem prazo"} · Grupo: {selGroup.name}
                   </p>
@@ -787,8 +865,6 @@ function MondayBoard() {
                       </button>
                     </div>
                   )}
-                  <p className="px-6 pt-2 text-right text-xs text-slate-400">✉ Atualizar via e-mail &nbsp;·&nbsp; Dar feedback</p>
-
                   {(
                     <div className="flex-1 overflow-y-auto px-6 py-4">
                       <div className="mb-3 flex items-center gap-2 text-sm">
@@ -799,16 +875,10 @@ function MondayBoard() {
                       </div>
                       <div className="rounded-lg border border-slate-300">
                         <div className="flex flex-wrap gap-1 border-b border-slate-200 px-3 py-2 text-sm text-slate-500">
-                          <button className="px-1.5" title="Parágrafo">¶</button>
                           <button onClick={() => wrapSelection("**", "**")} className="px-1.5 font-bold" title="Negrito">B</button>
                           <button onClick={() => wrapSelection("*", "*")} className="px-1.5 italic" title="Itálico">I</button>
                           <button onClick={() => wrapSelection("__", "__")} className="px-1.5 underline" title="Sublinhado">U</button>
-                          <button className="px-1.5 line-through" title="Riscado">S</button>
-                          <button className="px-1.5" title="Cor do texto">A</button>
-                          <button className="px-1.5" title="Lista">• ≡</button>
-                          <button className="px-1.5" title="Lista numerada">1. ≡</button>
-                          <button className="px-1.5" title="Link">🔗</button>
-                          <button className="px-1.5" title="Alinhamento">≡</button>
+                          <button onClick={() => wrapSelection("~~", "~~")} className="px-1.5 line-through" title="Riscado">S</button>
                         </div>
                         <textarea
                           ref={editorRef}
