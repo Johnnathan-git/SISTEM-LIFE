@@ -842,7 +842,7 @@ function MondayBoard() {
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="border border-slate-200 px-2 py-2 font-normal">Tarefa</th>
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
-                              <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Responsável</th>
+                              <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Responsável</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
                               <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>
                               <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Data</th>
@@ -890,10 +890,21 @@ function MondayBoard() {
                                     )}
                                   </button>
                                 </td>
-                                <td className="border border-slate-200 px-2 py-2 text-center">
-                                  <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} title={task.owner || "Sem responsável"} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${task.owner ? "text-white" : "bg-slate-200"}`} style={task.owner ? { backgroundColor: avatarBg(task.owner) } : undefined}>
-                                    {task.owner ? task.owner[0] : "○"}
-                                  </button>
+                                <td className="border border-slate-200 px-2 py-2">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button onClick={() => setSelected({ groupId: group.id, taskId: task.id })} title={task.owner || "Sem responsável"} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${task.owner ? "text-white" : "bg-slate-200"}`} style={task.owner ? { backgroundColor: avatarBg(task.owner) } : undefined}>
+                                      {task.owner ? task.owner[0] : "○"}
+                                    </button>
+                                    <select
+                                      value={task.owner}
+                                      onChange={(e) => updateTask(group.id, task.id, { owner: e.target.value })}
+                                      aria-label="Responsável da tarefa"
+                                      className="bg-transparent text-sm outline-none"
+                                    >
+                                      <option value="">Sem responsável</option>
+                                      {USERS.map((u) => <option key={u} value={u}>{u}</option>)}
+                                    </select>
+                                  </div>
                                 </td>
                                 <td className="border border-slate-200 p-0">
                                   <ColorDropdown
@@ -973,8 +984,17 @@ function MondayBoard() {
                           💬 Atualização{(t.updates ?? []).length > 0 ? ` (${(t.updates ?? []).length})` : ""}
                         </button>
                         <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                          {t.owner && <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: avatarBg(t.owner) }}>{t.owner[0]}</span>}
-                          {t.owner || "Sem responsável"} · {formatDate(t.due) || "Sem prazo"}
+                          {t.owner && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: avatarBg(t.owner) }}>{t.owner[0]}</span>}
+                          <select
+                            value={t.owner}
+                            onChange={(e) => updateTask(t.groupId, t.id, { owner: e.target.value })}
+                            aria-label="Responsável da tarefa"
+                            className="bg-transparent outline-none"
+                          >
+                            <option value="">Sem responsável</option>
+                            {USERS.map((u) => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                          <span>· {formatDate(t.due) || "Sem prazo"}</span>
                         </p>
                         <div className="mt-2 flex gap-2">
                           <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: PRIORITY_BG[t.priority] }}>{t.priority}</span>
