@@ -320,6 +320,7 @@ function MondayBoard() {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ groupId: string; taskId: string; after: boolean } | null>(null);
   // A flag do início da linha é seleção para excluir em lote, NÃO é "concluído".
   // Concluir é pelo Status, que aí sim move a tarefa para Resolvidos.
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -466,6 +467,41 @@ function MondayBoard() {
         if (g.id === toGroupId) return { ...g, tasks: [...g.tasks, { ...task, status }] };
         return g;
       }),
+    });
+    if (dest.name === "Resolvidos" || dest.name === "Concluídas") {
+      setCollapsed((prev) => prev.filter((id) => id !== toGroupId));
+    }
+  };
+
+  // Mover para uma posição exata (antes/depois de outra tarefa), não só para o fim de outro grupo.
+  const moveTaskBefore = (fromGroupId: string, taskId: string, toGroupId: string, targetTaskId: string, after: boolean) => {
+    if (taskId === targetTaskId) return;
+    const source = board.groups.find((g) => g.id === fromGroupId);
+    const dest = board.groups.find((g) => g.id === toGroupId);
+    const task = source?.tasks.find((t) => t.id === taskId);
+    if (!source || !dest || !task) return;
+    let moved = { ...task };
+    if (fromGroupId !== toGroupId) {
+      moved = {
+        ...task,
+        status:
+          dest.name === "Resolvidos" || dest.name === "Concluídas"
+            ? "Concluído"
+            : task.status === "Concluído"
+              ? "A fazer"
+              : task.status,
+      };
+    }
+    const groupsWithout = board.groups.map((g) => (g.id === fromGroupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g));
+    const destAfterRemoval = groupsWithout.find((g) => g.id === toGroupId);
+    if (!destAfterRemoval) return;
+    const targetIndex = destAfterRemoval.tasks.findIndex((t) => t.id === targetTaskId);
+    const newTasks = [...destAfterRemoval.tasks];
+    if (targetIndex === -1) newTasks.push(moved);
+    else newTasks.splice(after ? targetIndex + 1 : targetIndex, 0, moved);
+    updateBoard({
+      ...board,
+      groups: groupsWithout.map((g) => (g.id === toGroupId ? { ...g, tasks: newTasks } : g)),
     });
     if (dest.name === "Resolvidos" || dest.name === "Concluídas") {
       setCollapsed((prev) => prev.filter((id) => id !== toGroupId));
@@ -865,6 +901,7 @@ function MondayBoard() {
                       if (dragTask) {
                         moveTaskToGroup(dragTask.groupId, dragTask.taskId, group.id);
                         setDragTask(null);
+                        setDropTarget(null);
                       }
                     }}
                   >
@@ -896,6 +933,7 @@ function MondayBoard() {
                         <table className="w-full min-w-[820px] border-collapse text-sm">
                           <thead>
                             <tr className="text-slate-700">
+                              <th className="w-8 border border-slate-200 px-1 py-2 font-normal" />
                               <th className="w-2 border border-slate-200" style={{ backgroundColor: group.color }} />
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="border border-slate-200 px-2 py-2 font-normal">Tarefa</th>
@@ -911,11 +949,31 @@ function MondayBoard() {
                             {tasks.map((task) => (
                               <tr
                                 key={task.id}
-                                className="hover:bg-slate-50"
+                                className={`${dragTask?.taskId === task.id ? "cursor-grabbing" : "cursor-grab"} ${dropTarget?.taskId === task.id && dropTarget.groupId === group.id ? "bg-blue-100 hover:bg-blue-100" : "hover:bg-slate-50"}`}
                                 draggable
                                 onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
-                                onDragEnd={() => setDragTask(null)}
+                                onDragEnd={() => {
+                                  setDragTask(null);
+                                  setDropTarget(null);
+                                }}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setDropTarget({ groupId: group.id, taskId: task.id, after: e.clientY > rect.top + rect.height / 2 });
+                                }}
+                                onDragLeave={() => setDropTarget(null)}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (dragTask) {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    moveTaskBefore(dragTask.groupId, dragTask.taskId, group.id, task.id, e.clientY > rect.top + rect.height / 2);
+                                  }
+                                  setDragTask(null);
+                                  setDropTarget(null);
+                                }}
                               >
+                                <td className="cursor-grab border border-slate-200 px-1 py-2 text-center text-slate-400" title="Arrastar para mover">⋮⋮</td>
                                 <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
                                 <td className="border border-slate-200 px-2 py-2 text-center">
                                   <input
@@ -993,6 +1051,7 @@ function MondayBoard() {
                               </tr>
                             ))}
                             <tr>
+                              <td className="border border-slate-200" />
                               <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
                               <td colSpan={8} className="border border-slate-200 px-3 py-2">
                                 <button onClick={() => addTask(group.id)} className="text-slate-500">+ Adicionar Tarefa</button>
@@ -1018,6 +1077,7 @@ function MondayBoard() {
                     if (dragTask) {
                       updateTask(dragTask.groupId, dragTask.taskId, { status });
                       setDragTask(null);
+                      setDropTarget(null);
                     }
                   }}
                 >
@@ -1026,18 +1086,42 @@ function MondayBoard() {
                     {visibleTasks.filter((t) => t.status === status).map((t) => (
                       <article
                         key={t.id}
-                        className="rounded-lg border border-slate-200 bg-white p-3"
+                        className={`rounded-lg border border-slate-200 p-3 ${dragTask?.taskId === t.id ? "cursor-grabbing" : "cursor-grab"} ${dropTarget?.taskId === t.id ? "bg-blue-100" : "bg-white"}`}
                         draggable
                         onDragStart={() => setDragTask({ groupId: t.groupId, taskId: t.id })}
-                        onDragEnd={() => setDragTask(null)}
+                        onDragEnd={() => {
+                          setDragTask(null);
+                          setDropTarget(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setDropTarget({ groupId: t.groupId, taskId: t.id, after: e.clientY > rect.top + rect.height / 2 });
+                        }}
+                        onDragLeave={() => setDropTarget(null)}
+                        onDrop={(e) => {
+                          // No Kanban, reordenar só faz sentido dentro do mesmo grupo;
+                          // entre grupos diferentes, a queda na coluna (status) é quem vale.
+                          if (dragTask && dragTask.groupId === t.groupId) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            moveTaskBefore(dragTask.groupId, dragTask.taskId, t.groupId, t.id, e.clientY > rect.top + rect.height / 2);
+                            setDragTask(null);
+                            setDropTarget(null);
+                          }
+                        }}
                       >
-                        <input
+                        <div className="flex items-center gap-1">
+                          <span className="cursor-grab text-slate-400" title="Arrastar para mover">⋮⋮</span>
+                          <input
                           value={t.title}
                           onChange={(e) => updateTask(t.groupId, t.id, { title: e.target.value })}
                           placeholder="Nova tarefa"
                           aria-label="Título da tarefa"
                           className="w-full bg-transparent font-semibold text-slate-900 outline-none"
                         />
+                        </div>
                         <button onClick={() => setSelected({ groupId: t.groupId, taskId: t.id })} title="Abrir atualização" className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                           💬 Atualização{(t.updates ?? []).length > 0 ? ` (${(t.updates ?? []).length})` : ""}
                         </button>
