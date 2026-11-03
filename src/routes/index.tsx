@@ -435,7 +435,7 @@ function MondayBoard() {
 
           <div className="mt-4 flex items-center gap-4 border-b border-slate-200 text-sm">
             <button onClick={() => setView("table")} className={`border-b-2 px-1 pb-2 font-semibold ${view === "table" ? "border-slate-900" : "border-transparent text-slate-500"}`}>
-              Main Table
+              Tabela Principal
             </button>
             <button onClick={() => setView("kanban")} className={`border-b-2 px-1 pb-2 ${view === "kanban" ? "border-slate-900 font-semibold" : "border-transparent text-slate-500"}`}>
               Kanban
@@ -445,31 +445,31 @@ function MondayBoard() {
 
           <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
             <button onClick={() => addTask(board.groups[0]?.id ?? "")} className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white">
-              New Task
+              Nova Tarefa
             </button>
             <label className="flex items-center gap-1">
               <span>⌕</span>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" className="w-32 outline-none" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="w-32 outline-none" />
             </label>
             <label className="flex items-center gap-1">
               <span>👤</span>
               <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="bg-transparent outline-none">
-                <option value="Todos">Person</option>
+                <option value="Todos">Pessoa</option>
                 {USERS.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
             </label>
             <label className="flex items-center gap-1">
               <span>▽</span>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "Todos" | Status)} className="bg-transparent outline-none">
-                <option value="Todos">Filter</option>
+                <option value="Todos">Filtrar</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
             <button onClick={() => setSortByPriority((v) => !v)} className="flex items-center gap-1">
-              ↕ Sort{sortByPriority ? " ✓" : ""}
+              ↕ Ordenar{sortByPriority ? " ✓" : ""}
             </button>
             <button onClick={() => setShowPriority((v) => !v)} className="flex items-center gap-1">
-              👁 Hide{showPriority ? "" : " (prioridade oculta)"}
+              👁 Ocultar{showPriority ? "" : " (prioridade oculta)"}
             </button>
           </div>
 
@@ -502,12 +502,12 @@ function MondayBoard() {
                             <tr className="text-slate-700">
                               <th className="w-2 border border-slate-200" style={{ backgroundColor: group.color }} />
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
-                              <th className="border border-slate-200 px-2 py-2 font-normal">Task</th>
+                              <th className="border border-slate-200 px-2 py-2 font-normal">Tarefa</th>
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
-                              <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Person</th>
+                              <th className="w-28 border border-slate-200 px-2 py-2 font-normal">Pessoa</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
-                              {showPriority && <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Priority</th>}
-                              <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Date</th>
+                              {showPriority && <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>}
+                              <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Data</th>
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal">+</th>
                             </tr>
                           </thead>
@@ -586,7 +586,7 @@ function MondayBoard() {
                             <tr>
                               <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
                               <td colSpan={showPriority ? 8 : 7} className="border border-slate-200 px-3 py-2">
-                                <button onClick={() => addTask(group.id)} className="text-slate-500">+ Add Task</button>
+                                <button onClick={() => addTask(group.id)} className="text-slate-500">+ Adicionar Tarefa</button>
                               </td>
                             </tr>
                             <tr>
