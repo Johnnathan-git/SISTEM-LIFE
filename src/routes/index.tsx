@@ -321,8 +321,7 @@ function MondayBoard() {
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
   const [dropTarget, setDropTarget] = useState<{ groupId: string; taskId: string; after: boolean } | null>(null);
-  const [copiedAttachment, setCopiedAttachment] = useState<string | null>(null);
-  const [copyFailedAttachment, setCopyFailedAttachment] = useState<string | null>(null);
+
   // A flag do início da linha é seleção para excluir em lote, NÃO é "concluído".
   // Concluir é pelo Status, que aí sim move a tarefa para Resolvidos.
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -554,32 +553,6 @@ function MondayBoard() {
       groups: board.groups.map((g) => ({ ...g, tasks: g.tasks.filter((t) => !selectedTaskIds.has(t.id)) })),
     });
     setSelectedTaskIds(new Set());
-  };
-
-  // Copiar um print da atualização para colar em outro lugar (outra IA, outro chat).
-  // Se o navegador não deixar copiar a imagem direto, baixa o arquivo para anexar lá.
-  const downloadAttachment = (att: { name: string; dataUrl: string }) => {
-    const a = document.createElement("a");
-    a.href = att.dataUrl;
-    a.download = att.name;
-    a.click();
-  };
-
-  const copyAttachment = async (att: { name: string; dataUrl: string; type: string }, key: string) => {
-    try {
-      const ClipboardItemCtor = (window as any).ClipboardItem;
-      if (!navigator.clipboard || !ClipboardItemCtor) throw new Error("clipboard indisponível");
-      const blob = await fetch(att.dataUrl).then((r) => r.blob());
-      const type = blob.type.startsWith("image/") ? blob.type : "image/png";
-      await navigator.clipboard.write([new ClipboardItemCtor({ [type]: blob })]);
-      setCopyFailedAttachment(null);
-      setCopiedAttachment(key);
-      setTimeout(() => setCopiedAttachment((prev) => (prev === key ? null : prev)), 2500);
-    } catch {
-      downloadAttachment(att);
-      setCopyFailedAttachment(key);
-      setTimeout(() => setCopyFailedAttachment((prev) => (prev === key ? null : prev)), 4000);
-    }
   };
 
   const addUpdate = (groupId: string, taskId: string) => {
@@ -1362,15 +1335,7 @@ function MondayBoard() {
                                       att.type.startsWith("image") ? (
                                         <div key={ai} className="flex flex-col gap-1">
                                           <img src={att.dataUrl} alt={att.name} className="max-h-48 rounded-md border border-slate-200" />
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              onClick={() => copyAttachment(att, `${u.id}-${ai}`)}
-                                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700"
-                                            >
-                                              {copiedAttachment === `${u.id}-${ai}` ? "Copiado ✓" : copyFailedAttachment === `${u.id}-${ai}` ? "Não deu para copiar — baixei o arquivo" : "📋 Copiar print"}
-                                            </button>
-                                            <a href={att.dataUrl} download={att.name} className="text-xs underline text-slate-500">Baixar</a>
-                                          </div>
+                                          <a href={att.dataUrl} download={att.name} className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700">Baixar</a>
                                         </div>
                                       ) : (
                                         <a key={ai} href={att.dataUrl} download={att.name} className="text-sm underline">{att.name}</a>
