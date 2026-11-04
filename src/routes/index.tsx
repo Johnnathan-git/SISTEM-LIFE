@@ -329,7 +329,7 @@ function MondayBoard() {
   useEffect(() => {
     const loaded = loadBoards();
     setBoards(loaded);
-    setBoardId(loaded[0].id);
+    setBoardId(loaded[0]?.id ?? "");
   }, []);
 
   useEffect(() => {
@@ -375,7 +375,7 @@ function MondayBoard() {
     const chosen = found[Number(pick) - 1];
     if (!chosen) return;
     setBoards(chosen.boards);
-    setBoardId(chosen.boards[0].id);
+    setBoardId(chosen.boards[0]?.id ?? "");
   };
 
 
@@ -673,8 +673,8 @@ function MondayBoard() {
     const files: File[] = [];
     if (items) {
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
+        if (items[i]!.kind === "file" || items[i]!.type.startsWith("image/")) {
+          const file = items[i]!.getAsFile();
           if (file) files.push(file);
         }
       }
@@ -753,7 +753,7 @@ function MondayBoard() {
       setBoardId(fresh.id);
     } else {
       setBoards(remaining);
-      if (boardId === id) setBoardId(remaining[0].id);
+      if (boardId === id) setBoardId(remaining[0]?.id ?? "");
     }
   };
 
