@@ -311,6 +311,7 @@ function MondayBoard() {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
+  const [taskMenu, setTaskMenu] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ groupId: string; taskId: string; after: boolean } | null>(null);
   const [dragGroup, setDragGroup] = useState<string | null>(null);
   const [dropGroup, setDropGroup] = useState<{ groupId: string; after: boolean } | null>(null);
@@ -700,6 +701,19 @@ function MondayBoard() {
     });
   };
 
+  // Duplicar: cópia no mesmo grupo, logo após a original, com os mesmos campos,
+  // mas sem as atualizações/prints (a conversa começa vazia na cópia).
+  const duplicateTask = (groupId: string, taskId: string) => {
+    const group = board.groups.find((g) => g.id === groupId);
+    if (!group) return;
+    const index = group.tasks.findIndex((t) => t.id === taskId);
+    if (index === -1) return;
+    const copy = { ...group.tasks[index], id: newId(), updates: [] };
+    const tasks = [...group.tasks];
+    tasks.splice(index + 1, 0, copy);
+    updateBoard({ ...board, groups: board.groups.map((g) => (g.id === groupId ? { ...g, tasks } : g)) });
+  };
+
   const addUpdate = (groupId: string, taskId: string) => {
     const text = updateText.trim();
     // Um print sozinho, sem texto, também tem que salvar. Antes isso voltava sem fazer nada.
@@ -1023,19 +1037,14 @@ function MondayBoard() {
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Responsável</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
                               <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>
+                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                             </tr>
                           </thead>
                           <tbody>
                             {tasks.map((task) => (
                               <tr
                                 key={task.id}
-                                className={`${dragTask?.taskId === task.id ? "cursor-grabbing" : "cursor-grab"} ${dropTarget?.taskId === task.id && dropTarget.groupId === group.id ? "bg-blue-100 hover:bg-blue-100" : "hover:bg-slate-50"}`}
-                                draggable
-                                onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
-                                onDragEnd={() => {
-                                  setDragTask(null);
-                                  setDropTarget(null);
-                                }}
+                                className={`${dropTarget?.taskId === task.id && dropTarget.groupId === group.id ? "bg-blue-100 hover:bg-blue-100" : "hover:bg-slate-50"}`}
                                 onDragOver={(e) => {
                                   e.preventDefault();
                                   const rect = e.currentTarget.getBoundingClientRect();
@@ -1053,7 +1062,18 @@ function MondayBoard() {
                                   setDropTarget(null);
                                 }}
                               >
-                                <td className="cursor-grab border border-slate-200 px-1 py-2 text-center text-slate-400" title="Arrastar para mover">⋮⋮</td>
+                                <td
+                                  draggable
+                                  onDragStart={() => setDragTask({ groupId: group.id, taskId: task.id })}
+                                  onDragEnd={() => {
+                                    setDragTask(null);
+                                    setDropTarget(null);
+                                  }}
+                                  className={`${dragTask?.taskId === task.id ? "cursor-grabbing" : "cursor-grab"} border border-slate-200 px-1 py-2 text-center text-slate-400`}
+                                  title="Arrastar para mover"
+                                >
+                                  ⋮⋮
+                                </td>
                                 <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
                                 <td className="border border-slate-200 px-3 py-2">
                                   <input
@@ -1125,12 +1145,47 @@ function MondayBoard() {
                                     buttonClassName="w-full px-2 py-2.5 text-center font-medium text-white outline-none"
                                   />
                                 </td>
+                                <td className="relative border border-slate-200 px-2 py-2 text-center">
+                                  <button
+                                    onClick={() => setTaskMenu(taskMenu === task.id ? null : task.id)}
+                                    title="Mais ações"
+                                    aria-label="Mais ações da tarefa"
+                                    className="px-1 text-lg leading-none text-slate-500"
+                                  >
+                                    ⋮
+                                  </button>
+                                  {taskMenu === task.id && (
+                                    <>
+                                      <button aria-hidden className="fixed inset-0 z-20 cursor-default" onClick={() => setTaskMenu(null)} tabIndex={-1} />
+                                      <div className="absolute right-2 top-full z-30 flex w-36 flex-col overflow-hidden rounded-md border border-slate-200 bg-white text-left shadow-md">
+                                        <button
+                                          onClick={() => {
+                                            duplicateTask(group.id, task.id);
+                                            setTaskMenu(null);
+                                          }}
+                                          className="px-3 py-2 text-left text-sm hover:bg-slate-50"
+                                        >
+                                          Duplicar
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            removeTask(group.id, task.id);
+                                            setTaskMenu(null);
+                                          }}
+                                          className="px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                        >
+                                          Excluir
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                             <tr>
                               <td className="border border-slate-200" />
                               <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
-                              <td colSpan={6} className="border border-slate-200 px-3 py-2">
+                              <td colSpan={7} className="border border-slate-200 px-3 py-2">
                                 <button onClick={() => addTask(group.id)} className="text-slate-500">+ Adicionar Tarefa</button>
                               </td>
                             </tr>
