@@ -377,6 +377,15 @@ function MondayBoard() {
     setTimeout(() => editorRef.current?.focus(), 0);
   };
 
+  const pasteHandlerRef = useRef<((e: ClipboardEvent) => void) | null>(null);
+  const hasSelection = !!selected;
+  useEffect(() => {
+    if (!hasSelection) return;
+    const fn = (e: ClipboardEvent) => pasteHandlerRef.current?.(e);
+    window.addEventListener("paste", fn);
+    return () => window.removeEventListener("paste", fn);
+  }, [hasSelection, selected?.taskId]);
+
   const board = boards.find((b) => b.id === boardId) ?? boards[0];
   if (!board) return null;
 
@@ -682,11 +691,7 @@ function MondayBoard() {
     }
   };
 
-  useEffect(() => {
-    if (!selected) return;
-    window.addEventListener("paste", handleWindowPaste);
-    return () => window.removeEventListener("paste", handleWindowPaste);
-  }, [selected?.taskId]);
+  pasteHandlerRef.current = handleWindowPaste;
 
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
     const trimmed = text.trim();
@@ -771,7 +776,7 @@ function MondayBoard() {
 
   const orderedTasks = (tasks: Task[]) => tasks.filter(matches);
 
-  const visibleTasks = useMemo(() => allTasks.filter(matches), [boards, boardId, search, statusFilter]);
+  const visibleTasks = allTasks.filter(matches);
 
   const createBoard = () => {
     const name = newBoardName.trim() || "Novo quadro";
