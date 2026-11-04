@@ -856,7 +856,7 @@ function MondayBoard() {
         <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-slate-200 bg-white p-4 md:w-56 md:border-b-0 md:border-r">
           <div className="flex flex-col gap-1">
             <LifeLogo />
-            <p className="text-xs text-slate-500">Quadros de tarefas</p>
+            <p className="text-xs text-slate-500">Painel de Tarefas</p>
           </div>
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quadros</p>
@@ -873,28 +873,28 @@ function MondayBoard() {
                 </div>
               ))}
             </div>
+            <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-3">
+              <input
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                placeholder="Nome do novo quadro"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+              <button onClick={createBoard} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+                + Novo quadro
+              </button>
+            </div>
           </div>
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Usuários</p>
             <div className="flex flex-col gap-1">
               {USERS.map((u) => (
-                <span key={u} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                <span key={u} className="flex items-center gap-2 px-3 py-2 text-sm">
                   <Avatar name={u} className="h-6 w-6" />
                   {u}
                 </span>
               ))}
             </div>
-          </div>
-          <div className="mt-auto flex flex-col gap-2">
-            <input
-              value={newBoardName}
-              onChange={(e) => setNewBoardName(e.target.value)}
-              placeholder="Nome do novo quadro"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-            />
-            <button onClick={createBoard} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
-              + Novo quadro
-            </button>
           </div>
         </aside>
 
