@@ -62,13 +62,6 @@ function Avatar({ name, className }: { name: string; className: string }) {
   }
   return <img src={src} alt={name} className={`${className} rounded-full object-cover`} />;
 }
-const PRIORITY_ORDER: Record<Priority, number> = {
-  Crítica: 0,
-  Alta: 1,
-  Média: 2,
-  Baixa: 3,
-};
-
 // Cores no estilo Monday: a cor vai no fundo da etiqueta, o texto da tarefa fica escuro.
 const STATUS_BG: Record<Status, string> = {
   "A fazer": "#c4c4c4",
@@ -172,15 +165,10 @@ function ColorDropdown({
   );
 }
 
-// Logo Monday: duas barras inclinadas (rosa e amarela) + ponto verde.
-function MondayLogo() {
-  return (
-    <svg viewBox="0 0 100 70" aria-label="Monday 2.0" className="h-8 w-auto shrink-0">
-      <rect x="14" y="8" width="26" height="54" rx="13" fill="#f02d5a" transform="rotate(24 27 35)" />
-      <rect x="48" y="8" width="26" height="54" rx="13" fill="#ffcc00" transform="rotate(24 61 35)" />
-      <circle cx="84" cy="54" r="14" fill="#00c875" />
-    </svg>
-  );
+// Logo The Meritum (imagem enviada pelo usuário, embutida em base64 porque o push não aceita binários).
+const MERITUM_LOGO = "data:image/png;base64,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";
+function MeritumLogo() {
+  return <img src={MERITUM_LOGO} alt="The Meritum" className="h-10 w-auto shrink-0" />;
 }
 
 function newId() {
@@ -200,35 +188,8 @@ function newTask(title = "Nova tarefa"): Task {
   };
 }
 
-function exampleBoard(): Board {
-  return {
-    id: newId(),
-    name: "Meu trabalho",
-    groups: [
-      {
-        id: newId(),
-        name: "Esta semana",
-        color: "#579bfc",
-        tasks: [
-          { id: newId(), title: "Revisar relatório mensal", owner: "Johnnathan", status: "Trabalhando", priority: "Alta", due: "2026-11-06" },
-          { id: newId(), title: "Organizar documentos do mês", owner: "", status: "A fazer", priority: "Média", due: "2026-11-07" },
-          { id: newId(), title: "Ligar para fornecedor", owner: "", status: "A fazer", priority: "Crítica", due: "2026-11-04" },
-        ],
-      },
-      {
-        id: newId(),
-        name: "Próximas",
-        color: "#a25ddc",
-        tasks: [
-          { id: newId(), title: "Planejar a próxima semana", owner: "", status: "A fazer", priority: "Baixa", due: "" },
-          { id: newId(), title: "Revisar orçamento", owner: "", status: "Em revisão", priority: "Alta", due: "2026-11-12" },
-        ],
-      },
-    ],
-  };
-}
-
 const STORAGE_KEY = "sistema2-monday-v3";
+const BOARD_ID_KEY = "sistema2-monday-board-id";
 
 function pendenciasBoard(): Board {
   const urgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Crítica", due: "" });
@@ -285,15 +246,41 @@ function pendenciasBoard(): Board {
   };
 }
 
+// Teste: unifica Urgentes + Menos urgentes em "Grupo de Tarefas" e deixa só
+// "Concluídas" separada. Não muda prioridade nem status de nenhuma tarefa.
+function unifyTaskGroups(board: Board): Board {
+  const urgentGroups = board.groups.filter((g) => g.name === "Urgentes" || g.name === "Menos urgentes");
+  if (urgentGroups.length === 0) return board;
+  const existing = board.groups.find((g) => g.name === "Grupo de Tarefas");
+  const mergedTasks = urgentGroups.flatMap((g) => g.tasks);
+  const rest = board.groups
+    .filter((g) => g.name !== "Urgentes" && g.name !== "Menos urgentes" && g.name !== "Grupo de Tarefas")
+    .map((g) => (g.name === "Resolvidos" ? { ...g, name: "Concluídas" } : g));
+  const merged = existing
+    ? { ...existing, tasks: [...existing.tasks, ...mergedTasks] }
+    : { id: urgentGroups[0].id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
+  return { ...board, groups: [merged, ...rest] };
+}
+
+// O quadro de exemplo "Meu trabalho" não é mais semente: ele voltava sozinho
+// sempre que o armazenamento era recriado (nova aba, preview, dado corrompido).
+// Se ele ainda estiver salvo, é removido aqui, desde que seja o exemplo original
+// (grupos "Esta semana" + "Próximas") e não um quadro criado pelo usuário.
+function isExampleBoard(b: Board): boolean {
+  return b.name === "Meu trabalho" && b.groups.map((g) => g.name).join(",") === "Esta semana,Próximas";
+}
+
 function loadBoards(): Board[] {
+  const fallback = () => [pendenciasBoard()].map(unifyTaskGroups);
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [pendenciasBoard(), exampleBoard()];
+    if (!raw) return fallback();
     const parsed = JSON.parse(raw) as Board[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()];
-    return parsed;
+    if (!Array.isArray(parsed) || parsed.length === 0) return fallback();
+    const cleaned = parsed.filter((b) => !isExampleBoard(b)).map(unifyTaskGroups);
+    return cleaned.length > 0 ? cleaned : fallback();
   } catch {
-    return [pendenciasBoard(), exampleBoard()];
+    return fallback();
   }
 }
 
@@ -303,8 +290,9 @@ function formatDate(value: string) {
 }
 
 function MondayBoard() {
-  const [boards, setBoards] = useState<Board[]>(() => [exampleBoard()]);
+  const [boards, setBoards] = useState<Board[]>(() => [pendenciasBoard()].map(unifyTaskGroups));
   const [boardId, setBoardId] = useState<string>("");
+  const [boardsLoaded, setBoardsLoaded] = useState(false);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
@@ -314,8 +302,9 @@ function MondayBoard() {
   const [updateText, setUpdateText] = useState("");
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
   const [editingUpdateText, setEditingUpdateText] = useState("");
-  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
+  const [editingAttachments, setEditingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
   const [showDetails, setShowDetails] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
   const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
@@ -329,12 +318,21 @@ function MondayBoard() {
   useEffect(() => {
     const loaded = loadBoards();
     setBoards(loaded);
-    setBoardId(loaded[0]?.id ?? "");
+    let savedBoardId: string | null = null;
+    try {
+      savedBoardId = localStorage.getItem(BOARD_ID_KEY);
+    } catch {
+      savedBoardId = null;
+    }
+    setBoardId(savedBoardId && loaded.some((b) => b.id === savedBoardId) ? savedBoardId : (loaded[0]?.id ?? ""));
+    setBoardsLoaded(true);
   }, []);
 
   useEffect(() => {
     setEditingUpdateId(null);
     setEditingUpdateText("");
+    setEditingAttachments([]);
+    setShowDetails(false);
   }, [selected?.taskId]);
 
   useEffect(() => {
@@ -342,14 +340,28 @@ function MondayBoard() {
   }, [boardId]);
 
   useEffect(() => {
-    if (boards.length === 0) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
-    } catch {
-      alert("Atenção: o armazenamento do navegador está cheio (provavelmente por causa dos prints). As últimas alterações NÃO foram salvas.");
+    // Nunca salva antes de carregar: antes disso, boards era só um placeholder
+    // ([exemplo]) e esse salvamento de montagem sobrescrevia exclusões do usuário.
+    if (!boardsLoaded) return;
+    if (boards.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+      } catch {
+        // Quota do navegador (muitos prints em base64): não derruba o app;
+        // os dados continuam na tela e o próximo salvamento tenta de novo.
+        console.warn("Não foi possível salvar os quadros no navegador (armazenamento cheio).");
+      }
     }
-  }, [boards]);
+  }, [boards, boardsLoaded]);
 
+  useEffect(() => {
+    if (!boardsLoaded || !boardId) return;
+    try {
+      localStorage.setItem(BOARD_ID_KEY, boardId);
+    } catch {
+      // Sem persistência de aba: o quadro volta para o primeiro na próxima abertura.
+    }
+  }, [boardId, boardsLoaded]);
 
 
   const wrapSelection = (before: string, after: string) => {
@@ -366,7 +378,7 @@ function MondayBoard() {
   };
 
   const mentionMatch = updateText.slice(0, cursorPos).match(/@([\wÀ-ÿ]*)$/);
-  const mentionQuery = mentionMatch ? (mentionMatch[1] ?? "") : null;
+  const mentionQuery = mentionMatch ? mentionMatch[1] : null;
   const mentionOptions = mentionQuery !== null ? USERS.filter((u) => u.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [];
   const insertMention = (user: string) => {
     if (mentionQuery === null) return;
@@ -377,17 +389,137 @@ function MondayBoard() {
     setTimeout(() => editorRef.current?.focus(), 0);
   };
 
-  const pasteHandlerRef = useRef<((e: ClipboardEvent) => void) | null>(null);
-  const hasSelection = !!selected;
+  const processAttachmentFile = (file: File, onDone: (att: { name: string; dataUrl: string; type: string }) => void) => {
+    if (file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const max = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (Math.max(w, h) > max) {
+          const scale = max / Math.max(w, h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          onDone({ name: file.name || "imagem.jpg", dataUrl: canvas.toDataURL("image/jpeg", 0.85), type: "image/jpeg" });
+        }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            onDone({ name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type });
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+      img.src = url;
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          onDone({ name: file.name, dataUrl: reader.result as string, type: file.type });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addAttachmentsFromFiles = (files: File[]) => {
+    files.forEach((file) => processAttachmentFile(file, (att) => setPendingAttachments((prev) => [...prev, att])));
+  };
+
+  const addEditAttachmentsFromFiles = (files: File[]) => {
+    files.forEach((file) => processAttachmentFile(file, (att) => setEditingAttachments((prev) => [...prev, att])));
+  };
+
+  // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
+  // lugar do card anexa o print, sem precisar estar com o cursor dentro da caixa
+  // de texto e sem botão de anexar. Antes só funcionava colando dentro do textarea.
+  const handleWindowPaste = (e: ClipboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    // Editando uma atualização já postada: colar texto segue normal, colar print
+    // anexa na própria edição (e aparece abaixo da caixa antes de Salvar).
+    const isEditTextarea = target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...";
+    if (isEditTextarea) {
+      const hasFile =
+        Array.from(e.clipboardData?.items ?? []).some((i) => i.kind === "file" || i.type.startsWith("image/")) ||
+        (e.clipboardData?.files?.length ?? 0) > 0 ||
+        (e.clipboardData?.types ?? []).some((t) => t.startsWith("image/"));
+      if (!hasFile) return;
+    }
+    const items = e.clipboardData?.items;
+    const files: File[] = [];
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+    // Alguns navegadores entregam o arquivo em clipboardData.files, não em items.
+    if (files.length === 0 && e.clipboardData?.files?.length) {
+      files.push(...Array.from(e.clipboardData.files));
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      if (isEditTextarea) addEditAttachmentsFromFiles(files);
+      else addAttachmentsFromFiles(files);
+      return;
+    }
+    // Último recurso: se o clipboard diz que tem imagem mas o evento não a entregou,
+    // tenta ler direto do clipboard (pode pedir permissão ao navegador).
+    if (e.clipboardData?.types?.some((t) => t.startsWith("image/"))) {
+      void (async () => {
+        try {
+          const clipboardItems = await navigator.clipboard.read();
+          for (const item of clipboardItems) {
+            for (const type of item.types) {
+              if (type.startsWith("image/")) {
+                const blob = await item.getType(type);
+                if (isEditTextarea) addEditAttachmentsFromFiles([new File([blob], "print.png", { type })]);
+                else addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
+              }
+            }
+          }
+        } catch {
+          // Sem permissão ou sem imagem: deixa o colar normal seguir.
+        }
+      })();
+    }
+  };
+
+  const pasteHandlerRef = useRef(handleWindowPaste);
+  pasteHandlerRef.current = handleWindowPaste;
   useEffect(() => {
-    if (!hasSelection) return;
-    const fn = (e: ClipboardEvent) => pasteHandlerRef.current?.(e);
-    window.addEventListener("paste", fn);
-    return () => window.removeEventListener("paste", fn);
-  }, [hasSelection, selected?.taskId]);
+    if (!selected) return;
+    const listener = (e: ClipboardEvent) => pasteHandlerRef.current(e);
+    window.addEventListener("paste", listener);
+    return () => window.removeEventListener("paste", listener);
+  }, [selected?.taskId]);
+
+  const visibleTasks = useMemo(() => {
+    const b = boards.find((bb) => bb.id === boardId) ?? boards[0];
+    if (!b) return [];
+    return b.groups.flatMap((g) => g.tasks.map((t) => ({ ...t, groupId: g.id }))).filter((t) => {
+      const bySearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.owner.toLowerCase().includes(search.toLowerCase());
+      const byStatus = statusFilter === "Todos" || t.status === statusFilter;
+      return bySearch && byStatus;
+    });
+  }, [boards, boardId, search, statusFilter]);
 
   const board = boards.find((b) => b.id === boardId) ?? boards[0];
-  if (!board) return null;
+  if (!board) return <div className="min-h-screen bg-white p-6 text-slate-500">Carregando quadros…</div>;
 
   const updateBoard = (next: Board) => {
     setBoards((prev) => prev.map((b) => (b.id === next.id ? next : b)));
@@ -430,7 +562,7 @@ function MondayBoard() {
           ...board,
           groups: [
             ...board.groups.map((g) => (g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g)),
-            { id: newId(), name: "Resolvidos", color: "#00c875", tasks: [moved] },
+            { id: newId(), name: "Concluídas", color: "#00c875", tasks: [moved] },
           ],
         });
       }
@@ -465,7 +597,19 @@ function MondayBoard() {
   };
 
   const moveTaskToGroup = (fromGroupId: string, taskId: string, toGroupId: string) => {
-    if (fromGroupId === toGroupId) return;
+    if (fromGroupId === toGroupId) {
+      // Soltar na área do próprio grupo: vai para o fim dele, em vez de não fazer nada.
+      const group = board.groups.find((g) => g.id === fromGroupId);
+      const task = group?.tasks.find((t) => t.id === taskId);
+      if (!group || !task) return;
+      updateBoard({
+        ...board,
+        groups: board.groups.map((g) =>
+          g.id === fromGroupId ? { ...g, tasks: [...g.tasks.filter((t) => t.id !== taskId), task] } : g,
+        ),
+      });
+      return;
+    }
     const source = board.groups.find((g) => g.id === fromGroupId);
     const dest = board.groups.find((g) => g.id === toGroupId);
     const task = source?.tasks.find((t) => t.id === taskId);
@@ -594,104 +738,9 @@ function MondayBoard() {
     });
     setUpdateText("");
     setPendingAttachments([]);
+    // Deixa o editor pronto para o próximo print, sem precisar clicar nele de novo.
+    setTimeout(() => editorRef.current?.focus(), 0);
   };
-
-  const addAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => {
-      if (file.type.startsWith("image/")) {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-          const max = 1200;
-          let w = img.width;
-          let h = img.height;
-          if (Math.max(w, h) > max) {
-            const scale = max / Math.max(w, h);
-            w = Math.round(w * scale);
-            h = Math.round(h * scale);
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, w, h);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-            setPendingAttachments((prev) => [...prev, { name: file.name || "imagem.jpg", dataUrl, type: "image/jpeg" }]);
-          }
-          URL.revokeObjectURL(url);
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === "string") {
-              setPendingAttachments((prev) => [...prev, { name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type }]);
-            }
-          };
-          reader.readAsDataURL(file);
-        };
-        img.src = url;
-      } else {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === "string") {
-            setPendingAttachments((prev) => [...prev, { name: file.name, dataUrl: reader.result as string, type: file.type }]);
-          }
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-  };
-
-  // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
-  // lugar do card anexa o print, sem precisar estar com o cursor dentro da caixa
-  // de texto e sem botão de anexar. Antes só funcionava colando dentro do textarea.
-  const handleWindowPaste = (e: ClipboardEvent) => {
-    const target = e.target as HTMLElement | null;
-    // Não rouba o colar da edição de uma atualização já postada.
-    if (target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...") return;
-    const items = e.clipboardData?.items;
-    const files: File[] = [];
-    if (items) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i]!.kind === "file" || items[i]!.type.startsWith("image/")) {
-          const file = items[i]!.getAsFile();
-          if (file) files.push(file);
-        }
-      }
-    }
-    // Alguns navegadores entregam o arquivo em clipboardData.files, não em items.
-    if (files.length === 0 && e.clipboardData?.files?.length) {
-      files.push(...Array.from(e.clipboardData.files));
-    }
-    if (files.length > 0) {
-      e.preventDefault();
-      addAttachmentsFromFiles(files);
-      return;
-    }
-    // Último recurso: se o clipboard diz que tem imagem mas o evento não a entregou,
-    // tenta ler direto do clipboard (pode pedir permissão ao navegador).
-    if (e.clipboardData?.types?.some((t) => t.startsWith("image/"))) {
-      void (async () => {
-        try {
-          const clipboardItems = await navigator.clipboard.read();
-          for (const item of clipboardItems) {
-            for (const type of item.types) {
-              if (type.startsWith("image/")) {
-                const blob = await item.getType(type);
-                addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
-              }
-            }
-          }
-        } catch {
-          // Sem permissão ou sem imagem: deixa o colar normal seguir.
-        }
-      })();
-    }
-  };
-
-  pasteHandlerRef.current = handleWindowPaste;
 
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
     const trimmed = text.trim();
@@ -700,12 +749,13 @@ function MondayBoard() {
       ...board,
       groups: board.groups.map((g) =>
         g.id === groupId
-          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: (t.updates ?? []).map((u) => (u.id === updateId ? { ...u, text: trimmed, edited: true } : u)) } : t)) }
+          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: (t.updates ?? []).map((u) => (u.id === updateId ? { ...u, text: trimmed, edited: true, attachments: [...(u.attachments ?? []), ...editingAttachments] } : u)) } : t)) }
           : g,
       ),
     });
     setEditingUpdateId(null);
     setEditingUpdateText("");
+    setEditingAttachments([]);
   };
 
   const removeUpdate = (groupId: string, taskId: string, updateId: string) => {
@@ -731,7 +781,7 @@ function MondayBoard() {
       setBoardId(fresh.id);
     } else {
       setBoards(remaining);
-      if (boardId === id) setBoardId(remaining[0]?.id ?? "");
+      if (boardId === id) setBoardId(remaining[0].id);
     }
   };
 
@@ -766,7 +816,6 @@ function MondayBoard() {
     });
   };
 
-  const allTasks = board.groups.flatMap((g) => g.tasks.map((t) => ({ ...t, groupId: g.id })));
 
   const matches = (t: Task) => {
     const bySearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.owner.toLowerCase().includes(search.toLowerCase());
@@ -776,7 +825,6 @@ function MondayBoard() {
 
   const orderedTasks = (tasks: Task[]) => tasks.filter(matches);
 
-  const visibleTasks = allTasks.filter(matches);
 
   const createBoard = () => {
     const name = newBoardName.trim() || "Novo quadro";
@@ -792,14 +840,23 @@ function MondayBoard() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-56 shrink-0 flex-col gap-5 border-r border-slate-200 bg-white p-4 md:flex">
-          <div className="flex items-center gap-2">
-            <MondayLogo />
-            <div>
-              <p className="text-lg font-bold">MONDAY 2.0</p>
-              <p className="text-xs text-slate-500">Quadros de tarefas</p>
-            </div>
+      <style>{`
+        button {
+          cursor: pointer;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+          transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, transform 0.1s ease;
+        }
+        button:hover { filter: brightness(0.96); }
+        button:active { transform: scale(0.97); }
+        button:focus-visible { outline: 2px solid #0073ea; outline-offset: 2px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+      `}</style>
+      <div className="flex min-h-screen flex-col md:flex-row">
+        <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-slate-200 bg-white p-4 md:w-56 md:border-b-0 md:border-r">
+          <div className="flex flex-col gap-1">
+            <MeritumLogo />
+            <p className="text-xs text-slate-500">Quadros de tarefas</p>
           </div>
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quadros</p>
@@ -877,7 +934,7 @@ function MondayBoard() {
                 if (board.groups[0]) addTask(board.groups[0].id);
                 else addGroup();
               }}
-              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white"
+              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white hover:bg-[#0060c8]"
             >
               Nova Tarefa
             </button>
@@ -1279,7 +1336,7 @@ function MondayBoard() {
                       )}
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <p className="text-xs text-slate-500">Cole o print aqui na conversa (Ctrl+V) que ele anexa sozinho. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
-                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
+                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0060c8]">
                           Atualizar
                         </button>
                       </div>
@@ -1303,6 +1360,7 @@ function MondayBoard() {
                                     onClick={() => {
                                       setEditingUpdateId(u.id);
                                       setEditingUpdateText(u.text);
+                                      setEditingAttachments([]);
                                     }}
                                     className="text-xs text-slate-500 hover:text-slate-900"
                                     aria-label="Editar atualização"
@@ -1322,14 +1380,29 @@ function MondayBoard() {
                                       rows={3}
                                       className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none"
                                     />
+                                    {editingAttachments.length > 0 && (
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {editingAttachments.map((att, i) => (
+                                          <div key={i} className="relative rounded-md border border-slate-200 p-1">
+                                            {att.type.startsWith("image") ? (
+                                              <img src={att.dataUrl} alt={att.name} className="h-20 w-auto rounded" />
+                                            ) : (
+                                              <span className="text-sm">{att.name}</span>
+                                            )}
+                                            <button onClick={() => setEditingAttachments((prev) => prev.filter((_, idx) => idx !== i))} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs text-white" aria-label="Remover anexo">✕</button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                     <div className="mt-2 flex gap-2">
-                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white">
+                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#0060c8]">
                                         Salvar
                                       </button>
                                       <button
                                         onClick={() => {
                                           setEditingUpdateId(null);
                                           setEditingUpdateText("");
+                                          setEditingAttachments([]);
                                         }}
                                         className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600"
                                       >
