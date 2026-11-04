@@ -297,7 +297,7 @@ function unifyTaskGroups(board: Board): Board {
     .map((g) => (g.name === "Resolvidos" ? { ...g, name: "Concluídas" } : g));
   const merged = existing
     ? { ...existing, tasks: [...existing.tasks, ...mergedTasks] }
-    : { id: urgentGroups[0].id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
+    : { id: urgentGroups[0]!.id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
   return { ...board, groups: [merged, ...rest] };
 }
 
@@ -346,7 +346,7 @@ function MondayBoard() {
   useEffect(() => {
     const loaded = loadBoards();
     setBoards(loaded);
-    setBoardId(loaded[0].id);
+    setBoardId(loaded[0]!.id);
   }, []);
 
   useEffect(() => {
@@ -379,7 +379,7 @@ function MondayBoard() {
   };
 
   const mentionMatch = updateText.slice(0, cursorPos).match(/@([\wÀ-ÿ]*)$/);
-  const mentionQuery = mentionMatch ? mentionMatch[1] : null;
+  const mentionQuery = mentionMatch ? mentionMatch[1]! : null;
   const mentionOptions = mentionQuery !== null ? USERS.filter((u) => u.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [];
   const insertMention = (user: string) => {
     if (mentionQuery === null) return;
@@ -674,8 +674,8 @@ function MondayBoard() {
     const files: File[] = [];
     if (items) {
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
+        if (items[i]!.kind === "file" || items[i]!.type.startsWith("image/")) {
+          const file = items[i]!.getAsFile();
           if (file) files.push(file);
         }
       }
@@ -760,7 +760,7 @@ function MondayBoard() {
       setBoardId(fresh.id);
     } else {
       setBoards(remaining);
-      if (boardId === id) setBoardId(remaining[0].id);
+      if (boardId === id) setBoardId(remaining[0]!.id);
     }
   };
 
