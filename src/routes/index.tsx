@@ -393,7 +393,7 @@ function MondayBoard() {
   };
 
   const mentionMatch = updateText.slice(0, cursorPos).match(/@([\wÀ-ÿ]*)$/);
-  const mentionQuery = mentionMatch ? mentionMatch[1] : null;
+  const mentionQuery = mentionMatch ? (mentionMatch[1] ?? "") : null;
   const mentionOptions = mentionQuery !== null ? USERS.filter((u) => u.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [];
   const insertMention = (user: string) => {
     if (mentionQuery === null) return;
