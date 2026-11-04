@@ -329,7 +329,7 @@ function MondayBoard() {
   useEffect(() => {
     const loaded = loadBoards();
     setBoards(loaded);
-    setBoardId(loaded[0].id);
+    setBoardId(loaded[0]?.id ?? "");
   }, []);
 
   useEffect(() => {
@@ -342,8 +342,41 @@ function MondayBoard() {
   }, [boardId]);
 
   useEffect(() => {
-    if (boards.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+    if (boards.length === 0) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+    } catch {
+      alert("Atenção: o armazenamento do navegador está cheio (provavelmente por causa dos prints). As últimas alterações NÃO foram salvas.");
+    }
   }, [boards]);
+
+  const recoverOldData = () => {
+    const found: { key: string; boards: Board[]; updates: number }[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "");
+        if (Array.isArray(parsed) && parsed.length && parsed[0]?.groups) {
+          const updates = JSON.stringify(parsed).split('"author"').length - 1;
+          found.push({ key, boards: parsed as Board[], updates });
+        }
+      } catch {
+        /* not ours */
+      }
+    }
+    if (found.length === 0) {
+      alert("Nenhuma cópia antiga foi encontrada neste navegador.");
+      return;
+    }
+    found.sort((a, b) => b.updates - a.updates);
+    const list = found.map((f, i) => `${i + 1}) ${f.key} — ${f.boards.length} quadros, ~${f.updates} atualizações`).join("\n");
+    const pick = prompt(`Cópias encontradas:\n${list}\n\nDigite o número da cópia para restaurar:`, "1");
+    const chosen = found[Number(pick) - 1];
+    if (!chosen) return;
+    setBoards(chosen.boards);
+    setBoardId(chosen.boards[0]?.id ?? "");
+  };
 
 
   const wrapSelection = (before: string, after: string) => {
@@ -360,7 +393,7 @@ function MondayBoard() {
   };
 
   const mentionMatch = updateText.slice(0, cursorPos).match(/@([\wÀ-ÿ]*)$/);
-  const mentionQuery = mentionMatch ? mentionMatch[1] : null;
+  const mentionQuery = mentionMatch ? (mentionMatch[1] ?? "") : null;
   const mentionOptions = mentionQuery !== null ? USERS.filter((u) => u.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [];
   const insertMention = (user: string) => {
     if (mentionQuery === null) return;
@@ -640,8 +673,8 @@ function MondayBoard() {
     const files: File[] = [];
     if (items) {
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
+        if (items[i]!.kind === "file" || items[i]!.type.startsWith("image/")) {
+          const file = items[i]!.getAsFile();
           if (file) files.push(file);
         }
       }
@@ -720,7 +753,7 @@ function MondayBoard() {
       setBoardId(fresh.id);
     } else {
       setBoards(remaining);
-      if (boardId === id) setBoardId(remaining[0].id);
+      if (boardId === id) setBoardId(remaining[0]?.id ?? "");
     }
   };
 
@@ -826,6 +859,9 @@ function MondayBoard() {
             />
             <button onClick={createBoard} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
               + Novo quadro
+            </button>
+            <button onClick={recoverOldData} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+              Recuperar dados antigos
             </button>
           </div>
         </aside>
