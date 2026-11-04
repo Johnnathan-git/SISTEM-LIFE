@@ -285,31 +285,15 @@ function pendenciasBoard(): Board {
   };
 }
 
-// Teste: unifica Urgentes + Menos urgentes em "Grupo de Tarefas" e deixa só
-// "Concluídas" separada. Não muda prioridade nem status de nenhuma tarefa.
-function unifyTaskGroups(board: Board): Board {
-  const urgentGroups = board.groups.filter((g) => g.name === "Urgentes" || g.name === "Menos urgentes");
-  if (urgentGroups.length === 0) return board;
-  const existing = board.groups.find((g) => g.name === "Grupo de Tarefas");
-  const mergedTasks = urgentGroups.flatMap((g) => g.tasks);
-  const rest = board.groups
-    .filter((g) => g.name !== "Urgentes" && g.name !== "Menos urgentes" && g.name !== "Grupo de Tarefas")
-    .map((g) => (g.name === "Resolvidos" ? { ...g, name: "Concluídas" } : g));
-  const merged = existing
-    ? { ...existing, tasks: [...existing.tasks, ...mergedTasks] }
-    : { id: urgentGroups[0].id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
-  return { ...board, groups: [merged, ...rest] };
-}
-
 function loadBoards(): Board[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
+    if (!raw) return [pendenciasBoard(), exampleBoard()];
     const parsed = JSON.parse(raw) as Board[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
-    return parsed.map(unifyTaskGroups);
+    if (!Array.isArray(parsed) || parsed.length === 0) return [pendenciasBoard(), exampleBoard()];
+    return parsed;
   } catch {
-    return [pendenciasBoard(), exampleBoard()].map(unifyTaskGroups);
+    return [pendenciasBoard(), exampleBoard()];
   }
 }
 
@@ -330,9 +314,8 @@ function MondayBoard() {
   const [updateText, setUpdateText] = useState("");
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
   const [editingUpdateText, setEditingUpdateText] = useState("");
-  const [editingAttachments, setEditingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
-  const [showDetails, setShowDetails] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
+  const [showDetails, setShowDetails] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
@@ -352,8 +335,6 @@ function MondayBoard() {
   useEffect(() => {
     setEditingUpdateId(null);
     setEditingUpdateText("");
-    setEditingAttachments([]);
-    setShowDetails(false);
   }, [selected?.taskId]);
 
   useEffect(() => {
@@ -434,7 +415,7 @@ function MondayBoard() {
           ...board,
           groups: [
             ...board.groups.map((g) => (g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g)),
-            { id: newId(), name: "Concluídas", color: "#00c875", tasks: [moved] },
+            { id: newId(), name: "Resolvidos", color: "#00c875", tasks: [moved] },
           ],
         });
       }
@@ -598,61 +579,54 @@ function MondayBoard() {
     });
     setUpdateText("");
     setPendingAttachments([]);
-    // Deixa o editor pronto para o próximo print, sem precisar clicar nele de novo.
-    setTimeout(() => editorRef.current?.focus(), 0);
-  };
-
-  const processAttachmentFile = (file: File, onDone: (att: { name: string; dataUrl: string; type: string }) => void) => {
-    if (file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const max = 1200;
-        let w = img.width;
-        let h = img.height;
-        if (Math.max(w, h) > max) {
-          const scale = max / Math.max(w, h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, w, h);
-          onDone({ name: file.name || "imagem.jpg", dataUrl: canvas.toDataURL("image/jpeg", 0.85), type: "image/jpeg" });
-        }
-        URL.revokeObjectURL(url);
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === "string") {
-            onDone({ name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type });
-          }
-        };
-        reader.readAsDataURL(file);
-      };
-      img.src = url;
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          onDone({ name: file.name, dataUrl: reader.result as string, type: file.type });
-        }
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const addAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => processAttachmentFile(file, (att) => setPendingAttachments((prev) => [...prev, att])));
-  };
-
-  const addEditAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => processAttachmentFile(file, (att) => setEditingAttachments((prev) => [...prev, att])));
+    files.forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          const max = 1200;
+          let w = img.width;
+          let h = img.height;
+          if (Math.max(w, h) > max) {
+            const scale = max / Math.max(w, h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            setPendingAttachments((prev) => [...prev, { name: file.name || "imagem.jpg", dataUrl, type: "image/jpeg" }]);
+          }
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === "string") {
+              setPendingAttachments((prev) => [...prev, { name: file.name || "imagem.jpg", dataUrl: reader.result as string, type: file.type }]);
+            }
+          };
+          reader.readAsDataURL(file);
+        };
+        img.src = url;
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setPendingAttachments((prev) => [...prev, { name: file.name, dataUrl: reader.result as string, type: file.type }]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
   };
 
   // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
@@ -660,16 +634,8 @@ function MondayBoard() {
   // de texto e sem botão de anexar. Antes só funcionava colando dentro do textarea.
   const handleWindowPaste = (e: ClipboardEvent) => {
     const target = e.target as HTMLElement | null;
-    // Editando uma atualização já postada: colar texto segue normal, colar print
-    // anexa na própria edição (e aparece abaixo da caixa antes de Salvar).
-    const isEditTextarea = target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...";
-    if (isEditTextarea) {
-      const hasFile =
-        Array.from(e.clipboardData?.items ?? []).some((i) => i.kind === "file" || i.type.startsWith("image/")) ||
-        (e.clipboardData?.files?.length ?? 0) > 0 ||
-        (e.clipboardData?.types ?? []).some((t) => t.startsWith("image/"));
-      if (!hasFile) return;
-    }
+    // Não rouba o colar da edição de uma atualização já postada.
+    if (target instanceof HTMLTextAreaElement && target.placeholder !== "Escreva uma atualização...") return;
     const items = e.clipboardData?.items;
     const files: File[] = [];
     if (items) {
@@ -686,8 +652,7 @@ function MondayBoard() {
     }
     if (files.length > 0) {
       e.preventDefault();
-      if (isEditTextarea) addEditAttachmentsFromFiles(files);
-      else addAttachmentsFromFiles(files);
+      addAttachmentsFromFiles(files);
       return;
     }
     // Último recurso: se o clipboard diz que tem imagem mas o evento não a entregou,
@@ -700,8 +665,7 @@ function MondayBoard() {
             for (const type of item.types) {
               if (type.startsWith("image/")) {
                 const blob = await item.getType(type);
-                if (isEditTextarea) addEditAttachmentsFromFiles([new File([blob], "print.png", { type })]);
-                else addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
+                addAttachmentsFromFiles([new File([blob], "print.png", { type })]);
               }
             }
           }
@@ -712,13 +676,10 @@ function MondayBoard() {
     }
   };
 
-  const pasteHandlerRef = useRef(handleWindowPaste);
-  pasteHandlerRef.current = handleWindowPaste;
   useEffect(() => {
     if (!selected) return;
-    const listener = (e: ClipboardEvent) => pasteHandlerRef.current(e);
-    window.addEventListener("paste", listener);
-    return () => window.removeEventListener("paste", listener);
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
   }, [selected?.taskId]);
 
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
@@ -728,13 +689,12 @@ function MondayBoard() {
       ...board,
       groups: board.groups.map((g) =>
         g.id === groupId
-          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: (t.updates ?? []).map((u) => (u.id === updateId ? { ...u, text: trimmed, edited: true, attachments: [...(u.attachments ?? []), ...editingAttachments] } : u)) } : t)) }
+          ? { ...g, tasks: g.tasks.map((t) => (t.id === taskId ? { ...t, updates: (t.updates ?? []).map((u) => (u.id === updateId ? { ...u, text: trimmed, edited: true } : u)) } : t)) }
           : g,
       ),
     });
     setEditingUpdateId(null);
     setEditingUpdateText("");
-    setEditingAttachments([]);
   };
 
   const removeUpdate = (groupId: string, taskId: string, updateId: string) => {
@@ -821,18 +781,6 @@ function MondayBoard() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
-      <style>{`
-        button {
-          cursor: pointer;
-          user-select: none;
-          -webkit-tap-highlight-color: transparent;
-          transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, transform 0.1s ease;
-        }
-        button:hover { filter: brightness(0.96); }
-        button:active { transform: scale(0.97); }
-        button:focus-visible { outline: 2px solid #0073ea; outline-offset: 2px; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-      `}</style>
       <div className="flex min-h-screen">
         <aside className="hidden w-56 shrink-0 flex-col gap-5 border-r border-slate-200 bg-white p-4 md:flex">
           <div className="flex items-center gap-2">
@@ -918,7 +866,7 @@ function MondayBoard() {
                 if (board.groups[0]) addTask(board.groups[0].id);
                 else addGroup();
               }}
-              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white hover:bg-[#0060c8]"
+              className="rounded-md bg-[#0073ea] px-4 py-2 font-semibold text-white"
             >
               Nova Tarefa
             </button>
@@ -1320,7 +1268,7 @@ function MondayBoard() {
                       )}
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <p className="text-xs text-slate-500">Cole o print aqui na conversa (Ctrl+V) que ele anexa sozinho. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
-                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0060c8]">
+                        <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white">
                           Atualizar
                         </button>
                       </div>
@@ -1344,7 +1292,6 @@ function MondayBoard() {
                                     onClick={() => {
                                       setEditingUpdateId(u.id);
                                       setEditingUpdateText(u.text);
-                                      setEditingAttachments([]);
                                     }}
                                     className="text-xs text-slate-500 hover:text-slate-900"
                                     aria-label="Editar atualização"
@@ -1364,29 +1311,14 @@ function MondayBoard() {
                                       rows={3}
                                       className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none"
                                     />
-                                    {editingAttachments.length > 0 && (
-                                      <div className="mt-2 flex flex-wrap gap-2">
-                                        {editingAttachments.map((att, i) => (
-                                          <div key={i} className="relative rounded-md border border-slate-200 p-1">
-                                            {att.type.startsWith("image") ? (
-                                              <img src={att.dataUrl} alt={att.name} className="h-20 w-auto rounded" />
-                                            ) : (
-                                              <span className="text-sm">{att.name}</span>
-                                            )}
-                                            <button onClick={() => setEditingAttachments((prev) => prev.filter((_, idx) => idx !== i))} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs text-white" aria-label="Remover anexo">✕</button>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
                                     <div className="mt-2 flex gap-2">
-                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#0060c8]">
+                                      <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white">
                                         Salvar
                                       </button>
                                       <button
                                         onClick={() => {
                                           setEditingUpdateId(null);
                                           setEditingUpdateText("");
-                                          setEditingAttachments([]);
                                         }}
                                         className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600"
                                       >
