@@ -25,6 +25,7 @@ type Task = {
   owner: string;
   status: Status;
   priority: Priority;
+  sector?: string;
   due: string;
   notes?: string;
   updates?: Update[];
@@ -46,6 +47,7 @@ type Board = {
 const STATUSES: Status[] = ["A fazer", "Trabalhando", "Em revisão", "Concluído", "Travado"];
 const PRIORITIES: Priority[] = ["Crítica", "Alta", "Média", "Baixa"];
 const USERS = ["Johnnathan", "Emanuel"];
+const SECTORS = ["Recepção", "Gerencia", "Bares", "Cozinha", "Restaurante", "Governança", "Manutenção", "Compras", "RH", "Financeiro", "Comercial"];
 // Foto de cada usuário no lugar da inicial, em todos os lugares onde o nome aparece.
 const USER_AVATAR: Record<string, string> = {
   Johnnathan: johnnathanAvatar,
@@ -313,10 +315,6 @@ function MondayBoard() {
   const [dragGroup, setDragGroup] = useState<string | null>(null);
   const [dropGroup, setDropGroup] = useState<{ groupId: string; after: boolean } | null>(null);
 
-  // A flag do início da linha é seleção para excluir em lote, NÃO é "concluído".
-  // Concluir é pelo Status, que aí sim move a tarefa para Resolvidos.
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
-
   useEffect(() => {
     const loaded = loadBoards();
     setBoards(loaded);
@@ -336,10 +334,6 @@ function MondayBoard() {
     setEditingAttachments([]);
     setShowDetails(false);
   }, [selected?.taskId]);
-
-  useEffect(() => {
-    setSelectedTaskIds(new Set());
-  }, [boardId]);
 
   useEffect(() => {
     // Nunca salva antes de carregar: antes disso, boards era só um placeholder
@@ -704,30 +698,6 @@ function MondayBoard() {
         g.id === groupId ? { ...g, tasks: g.tasks.filter((t) => t.id !== taskId) } : g,
       ),
     });
-    setSelectedTaskIds((prev) => {
-      const next = new Set(prev);
-      next.delete(taskId);
-      return next;
-    });
-  };
-
-  const toggleTaskSelection = (taskId: string) => {
-    setSelectedTaskIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
-    });
-  };
-
-  const deleteSelectedTasks = () => {
-    if (selectedTaskIds.size === 0) return;
-    if (!window.confirm(`Excluir ${selectedTaskIds.size} tarefa(s) selecionada(s)?`)) return;
-    updateBoard({
-      ...board,
-      groups: board.groups.map((g) => ({ ...g, tasks: g.tasks.filter((t) => !selectedTaskIds.has(t.id)) })),
-    });
-    setSelectedTaskIds(new Set());
   };
 
   const addUpdate = (groupId: string, taskId: string) => {
@@ -965,11 +935,6 @@ function MondayBoard() {
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
-            {selectedTaskIds.size > 0 && (
-              <button onClick={deleteSelectedTasks} className="rounded-md bg-red-50 px-3 py-2 font-semibold text-red-700">
-                Excluir selecionadas ({selectedTaskIds.size})
-              </button>
-            )}
           </div>
 
           {view === "table" ? (
@@ -1052,14 +1017,12 @@ function MondayBoard() {
                             <tr className="text-slate-700">
                               <th className="w-8 border border-slate-200 px-1 py-2 font-normal" />
                               <th className="w-2 border border-slate-200" style={{ backgroundColor: group.color }} />
-                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="border border-slate-200 px-2 py-2 font-normal">Tarefa</th>
+                              <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Setor</th>
                               <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Responsável</th>
                               <th className="w-44 border border-slate-200 px-2 py-2 font-normal">Status</th>
                               <th className="w-36 border border-slate-200 px-2 py-2 font-normal">Prioridade</th>
-                              <th className="w-32 border border-slate-200 px-2 py-2 font-normal">Data</th>
-                              <th className="w-10 border border-slate-200 px-2 py-2 font-normal" />
                             </tr>
                           </thead>
                           <tbody>
@@ -1092,14 +1055,6 @@ function MondayBoard() {
                               >
                                 <td className="cursor-grab border border-slate-200 px-1 py-2 text-center text-slate-400" title="Arrastar para mover">⋮⋮</td>
                                 <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
-                                <td className="border border-slate-200 px-2 py-2 text-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedTaskIds.has(task.id)}
-                                    onChange={() => toggleTaskSelection(task.id)}
-                                    aria-label="Selecionar tarefa"
-                                  />
-                                </td>
                                 <td className="border border-slate-200 px-3 py-2">
                                   <input
                                     value={task.title}
@@ -1108,6 +1063,17 @@ function MondayBoard() {
                                     aria-label="Título da tarefa"
                                     className="w-full bg-transparent text-slate-900 outline-none"
                                   />
+                                </td>
+                                <td className="border border-slate-200 px-2 py-2">
+                                  <select
+                                    value={task.sector ?? ""}
+                                    onChange={(e) => updateTask(group.id, task.id, { sector: e.target.value })}
+                                    aria-label="Setor da tarefa"
+                                    className="bg-transparent text-sm outline-none"
+                                  >
+                                    <option value="">Sem setor</option>
+                                    {SECTORS.map((sec) => <option key={sec} value={sec}>{sec}</option>)}
+                                  </select>
                                 </td>
                                 <td className="border border-slate-200 px-2 py-2 text-center">
                                   <button
@@ -1159,18 +1125,12 @@ function MondayBoard() {
                                     buttonClassName="w-full px-2 py-2.5 text-center font-medium text-white outline-none"
                                   />
                                 </td>
-                                <td className="border border-slate-200 px-2 py-2 text-center text-slate-500">
-                                  <input type="date" value={task.due} onChange={(e) => updateTask(group.id, task.id, { due: e.target.value })} className="bg-transparent text-center outline-none" />
-                                </td>
-                                <td className="border border-slate-200 px-2 py-2 text-center">
-                                  <button onClick={() => removeTask(group.id, task.id)} className="text-slate-400 hover:text-red-600" aria-label="Excluir tarefa">✕</button>
-                                </td>
                               </tr>
                             ))}
                             <tr>
                               <td className="border border-slate-200" />
                               <td className="border border-slate-200" style={{ backgroundColor: group.color }} />
-                              <td colSpan={8} className="border border-slate-200 px-3 py-2">
+                              <td colSpan={6} className="border border-slate-200 px-3 py-2">
                                 <button onClick={() => addTask(group.id)} className="text-slate-500">+ Adicionar Tarefa</button>
                               </td>
                             </tr>
