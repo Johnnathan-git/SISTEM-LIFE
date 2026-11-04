@@ -310,6 +310,8 @@ function MondayBoard() {
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
   const [dragTask, setDragTask] = useState<{ groupId: string; taskId: string } | null>(null);
   const [dropTarget, setDropTarget] = useState<{ groupId: string; taskId: string; after: boolean } | null>(null);
+  const [dragGroup, setDragGroup] = useState<string | null>(null);
+  const [dropGroup, setDropGroup] = useState<{ groupId: string; after: boolean } | null>(null);
 
   // A flag do início da linha é seleção para excluir em lote, NÃO é "concluído".
   // Concluir é pelo Status, que aí sim move a tarefa para Resolvidos.
@@ -668,6 +670,20 @@ function MondayBoard() {
     }
   };
 
+  // Mover um grupo inteiro para antes/depois de outro grupo, igual às tarefas.
+  // Reordenação pura: não altera tarefas, status ou prioridades dentro do grupo.
+  const moveGroupBefore = (sourceId: string, targetId: string, after: boolean) => {
+    if (sourceId === targetId) return;
+    const source = board.groups.find((g) => g.id === sourceId);
+    if (!source) return;
+    const without = board.groups.filter((g) => g.id !== sourceId);
+    const targetIndex = without.findIndex((g) => g.id === targetId);
+    if (targetIndex === -1) return;
+    const next = [...without];
+    next.splice(after ? targetIndex + 1 : targetIndex, 0, source);
+    updateBoard({ ...board, groups: next });
+  };
+
   const addTask = (groupId: string) => {
     const target = board.groups.find((g) => g.id === groupId);
     // Resolvidos só guarda tarefa concluída: criar ali já nasce concluída, em vez de um "A fazer" perdido no grupo errado.
@@ -967,6 +983,7 @@ function MondayBoard() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
+                      if (dragGroup) return;
                       if (dragTask) {
                         moveTaskToGroup(dragTask.groupId, dragTask.taskId, group.id);
                         setDragTask(null);
@@ -974,7 +991,38 @@ function MondayBoard() {
                       }
                     }}
                   >
-                    <div className="mb-2 flex items-center gap-2">
+                    <div
+                      className={`mb-2 flex items-center gap-2 ${dropGroup?.groupId === group.id ? "rounded bg-blue-100" : ""}`}
+                      onDragOver={(e) => {
+                        if (!dragGroup) return;
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setDropGroup({ groupId: group.id, after: e.clientY > rect.top + rect.height / 2 });
+                      }}
+                      onDragLeave={() => setDropGroup(null)}
+                      onDrop={(e) => {
+                        // Sem grupo arrastado, deixa a soltura subir para a seção (mover tarefa para o grupo, como antes).
+                        if (!dragGroup) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        moveGroupBefore(dragGroup, group.id, e.clientY > rect.top + rect.height / 2);
+                        setDragGroup(null);
+                        setDropGroup(null);
+                      }}
+                    >
+                      <span
+                        draggable
+                        onDragStart={() => setDragGroup(group.id)}
+                        onDragEnd={() => {
+                          setDragGroup(null);
+                          setDropGroup(null);
+                        }}
+                        className={`${dragGroup === group.id ? "cursor-grabbing" : "cursor-grab"} text-slate-400`}
+                        title="Arrastar para mover o grupo"
+                      >
+                        ⋮⋮
+                      </span>
                       <input
                         type="color"
                         value={group.color}
