@@ -193,32 +193,6 @@ function newTask(title = "Nova tarefa"): Task {
 const STORAGE_KEY = "sistema2-monday-v3";
 const BOARD_ID_KEY = "sistema2-monday-board-id";
 
-// Resgate: a versão rica tem setores preenchidos e/ou atualizações. A semente
-// agora É a versão rica, então este teste sozinho não basta para decidir o
-// backup automático — o efeito abaixo só baixa quando os quadros vieram do
-// armazenamento do navegador, não da semente.
-function isRichBoard(boards: Board[]): boolean {
-  return boards.some((b) =>
-    b.groups.some(
-      (g) =>
-        !["Urgentes", "Menos urgentes", "Resolvidos", "Grupo de Tarefas", "Concluídas"].includes(g.name) ||
-        g.tasks.some((t) => (t.updates ?? []).length > 0 || !!t.sector),
-    ),
-  );
-}
-
-function downloadBoards(boards: Board[]) {
-  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), boards }, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `sistema2-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 // Semente = versao rica exportada em 2026-11-05 (sistema2-backup-2026-11-05.json):
 // 29 tarefas, 27 atualizacoes, 19 prints. O link publicado abre a versao rica
 // por padrao, sem precisar importar - publicar leva so o codigo, nunca os dados
@@ -326,56 +300,6 @@ function MondayBoard() {
     setBoardId(savedBoardId && loaded.some((b) => b.id === savedBoardId) ? savedBoardId : (loaded[0]?.id ?? ""));
     setBoardsLoaded(true);
   }, []);
-
-  // Resgate: quando o quadro carrega com dados salvos no navegador, baixa o
-  // backup sozinho, uma única vez por abertura — sem depender de clique,
-  // porque o preview do Lovable pode trocar a versão segundos depois.
-  // Não baixa quando os quadros vieram da semente (ex.: primeira abertura do
-  // link publicado): a semente agora é a versão rica, e baixar um backup em
-  // toda abertura nova seria só ruído. Não muda nada em persistência/carregamento.
-  const autoBackupDone = useRef(false);
-  const importInputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (!boardsLoaded || autoBackupDone.current) return;
-    autoBackupDone.current = true;
-    let fromStorage = false;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      fromStorage = Array.isArray(parsed) && parsed.length > 0;
-    } catch {
-      fromStorage = false;
-    }
-    if (!fromStorage) return;
-    if (isRichBoard(boards)) {
-      try {
-        downloadBoards(boards);
-      } catch {
-        // Se o navegador bloquear o download automático, o botão Exportar
-        // na barra de ferramentas continua disponível.
-      }
-    }
-  }, [boardsLoaded]);
-
-  const exportBoards = () => downloadBoards(boards);
-
-  const importBoards = (file: File) => {
-    file
-      .text()
-      .then((text) => {
-        const parsed = JSON.parse(text) as { boards?: Board[] } | Board[];
-        const imported = (Array.isArray(parsed) ? parsed : parsed.boards) as Board[] | undefined;
-        if (!Array.isArray(imported) || imported.length === 0 || !imported.every((b) => b && Array.isArray(b.groups))) {
-          throw new Error("invalid");
-        }
-        if (!window.confirm(`Importar o backup com ${imported.length} quadro(s)? Isso substitui o quadro atual neste navegador.`)) return;
-        setBoards(imported);
-        setBoardId(imported[0].id);
-      })
-      .catch(() => {
-        window.alert("Arquivo de backup inválido.");
-      });
-  };
 
   useEffect(() => {
     setEditingUpdateId(null);
@@ -997,23 +921,6 @@ function MondayBoard() {
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
-            <button onClick={exportBoards} title="Baixar um arquivo com todos os quadros, tarefas, setores e atualizações" className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">
-              Exportar
-            </button>
-            <button onClick={() => importInputRef.current?.click()} title="Carregar um arquivo de backup exportado" className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">
-              Importar
-            </button>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) importBoards(file);
-                e.target.value = "";
-              }}
-            />
           </div>
 
           {view === "table" ? (
