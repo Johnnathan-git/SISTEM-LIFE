@@ -295,6 +295,7 @@ function MondayBoard() {
   const [boards, setBoards] = useState<Board[]>(() => [pendenciasBoard()].map(unifyTaskGroups));
   const [boardId, setBoardId] = useState<string>("");
   const [boardsLoaded, setBoardsLoaded] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
@@ -343,10 +344,11 @@ function MondayBoard() {
     if (boards.length > 0) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+        setSaveError(false);
       } catch {
-        // Quota do navegador (muitos prints em base64): não derruba o app;
-        // os dados continuam na tela e o próximo salvamento tenta de novo.
-        console.warn("Não foi possível salvar os quadros no navegador (armazenamento cheio).");
+        // Quota do navegador (muitos prints em base64): não derruba o app,
+        // mas avisa na tela — antes a falha era silenciosa e o usuário perdia tudo ao recarregar.
+        setSaveError(true);
       }
     }
   }, [boards, boardsLoaded]);
@@ -852,6 +854,11 @@ function MondayBoard() {
         button:focus-visible { outline: 2px solid #0073ea; outline-offset: 2px; }
         button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
       `}</style>
+      {saveError && (
+        <div role="alert" className="sticky top-0 z-50 bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white">
+          ⚠️ Não foi possível salvar! O armazenamento do navegador está cheio (provavelmente por causa dos prints). Não atualize a página — remova alguns prints para liberar espaço.
+        </div>
+      )}
       <div className="flex min-h-screen flex-col md:flex-row">
         <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-slate-200 bg-white p-4 md:w-56 md:border-b-0 md:border-r">
           <div className="flex flex-col gap-1">
