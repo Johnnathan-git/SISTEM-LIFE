@@ -193,6 +193,7 @@ function newTask(title = "Nova tarefa"): Task {
 
 const STORAGE_KEY = "sistema2-monday-v3";
 const BOARD_ID_KEY = "sistema2-monday-board-id";
+const LOCAL_AT_KEY = "sistema2-local-updated-at";
 
 // Sincronização na nuvem (Supabase, projeto "Vida Sistêmica"): o quadro mora
 // numa linha só da tabela "boards" (id "main") e vale para todos os navegadores.
@@ -371,8 +372,30 @@ function MondayBoard() {
           const json = JSON.stringify(data.data);
           if (data.updated_at) lastCloudAtRef.current = data.updated_at;
           if (json !== JSON.stringify(boards)) {
-            lastCloudJsonRef.current = json;
-            setBoards(data.data as Board[]);
+            // Quem é mais novo vence: se este navegador tem uma edição local
+            // mais recente que a nuvem (feita antes de ser enviada), subimos
+            // a edição local em vez de apagá-la com a nuvem. Sem carimbo
+            // local, ou com a nuvem mais nova, a nuvem vence como antes.
+            let localAt = "";
+            try { localAt = localStorage.getItem(LOCAL_AT_KEY) || ""; } catch { localAt = ""; }
+            const localMs = localAt ? Date.parse(localAt) : NaN;
+            const cloudMs = data.updated_at ? Date.parse(data.updated_at) : NaN;
+            if (!Number.isNaN(localMs) && (Number.isNaN(cloudMs) || localMs > cloudMs)) {
+              const at = new Date().toISOString();
+              lastCloudJsonRef.current = JSON.stringify(boards);
+              lastCloudAtRef.current = at;
+              try { localStorage.setItem(LOCAL_AT_KEY, at); } catch {}
+              supabase
+                .from(CLOUD_TABLE)
+                .upsert({ id: CLOUD_ROW_ID, data: boards, updated_by: clientIdRef.current, updated_at: at })
+                .then(({ error: upsertError }) => {
+                  if (!cancelled) setCloudStatus(upsertError ? "error" : "on");
+                });
+            } else {
+              lastCloudJsonRef.current = json;
+              setBoards(data.data as Board[]);
+              try { localStorage.setItem(LOCAL_AT_KEY, data.updated_at || ""); } catch {}
+            }
           } else {
             lastCloudJsonRef.current = json;
           }
@@ -410,6 +433,13 @@ function MondayBoard() {
     if (boards.length > 0) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+        // Carimbo da última edição feita neste navegador. Só carimba quando
+        // o quadro difere do último estado conhecido da nuvem e a nuvem já
+        // foi lida — assim a abertura inicial e os dados vindos da nuvem não
+        // carimbam nada, e uma edição não enviada sobrevive à atualização.
+        if (cloudReadyRef.current && JSON.stringify(boards) !== lastCloudJsonRef.current) {
+          localStorage.setItem(LOCAL_AT_KEY, new Date().toISOString());
+        }
       } catch {
         // Quota do navegador (muitos prints em base64): não derruba o app;
         // os dados continuam na tela e o próximo salvamento tenta de novo.
@@ -445,12 +475,13 @@ function MondayBoard() {
     boardsRef.current = boards;
   }, [boards]);
 
-  // Reserva do ao vivo: se o canal em tempo real falhar, verifica a nuvem a
-  // cada 5s para que as mudanças dos outros apareçam sem atualizar a página.
-  // Só aplica quando a nuvem é mais nova que o último estado visto e não há
-  // edição local pendente — nunca sobrescreve uma mudança ainda não enviada.
+  // Reserva do ao vivo: enquanto o canal em tempo real não estiver inscrito
+  // (falhou ou travou conectando), verifica a nuvem a cada 5s para que as
+  // mudanças dos outros apareçam sem atualizar a página. Só aplica quando a
+  // nuvem é mais nova que o último estado visto e não há edição local
+  // pendente — nunca sobrescreve uma mudança ainda não enviada.
   useEffect(() => {
-    if (!boardsLoaded || !isSupabaseConfigured || !supabase || realtimeOk !== false) return;
+    if (!boardsLoaded || !isSupabaseConfigured || !supabase || realtimeOk === true) return;
     const timer = setInterval(() => {
       if (document.hidden) return;
       supabase
