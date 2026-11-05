@@ -363,11 +363,11 @@ function MondayBoard() {
       .maybeSingle()
       .then(({ data, error }) => {
         if (cancelled) return;
-        cloudReadyRef.current = true;
         if (error) {
           setCloudStatus("error");
           return;
         }
+        cloudReadyRef.current = true;
         if (data && Array.isArray(data.data)) {
           const json = JSON.stringify(data.data);
           if (data.updated_at) lastCloudAtRef.current = data.updated_at;
