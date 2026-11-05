@@ -193,6 +193,31 @@ function newTask(title = "Nova tarefa"): Task {
 const STORAGE_KEY = "sistema2-monday-v3";
 const BOARD_ID_KEY = "sistema2-monday-board-id";
 
+// Resgate: a versão rica tem setores preenchidos e/ou atualizações; a semente
+// não tem nenhum dos dois. Só baixa o backup automático quando há dados
+// além da semente, para não baixar um arquivo vazio no link publicado.
+function isRichBoard(boards: Board[]): boolean {
+  return boards.some((b) =>
+    b.groups.some(
+      (g) =>
+        !["Urgentes", "Menos urgentes", "Resolvidos", "Grupo de Tarefas", "Concluídas"].includes(g.name) ||
+        g.tasks.some((t) => (t.updates ?? []).length > 0 || !!t.sector),
+    ),
+  );
+}
+
+function downloadBoards(boards: Board[]) {
+  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), boards }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sistema2-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function pendenciasBoard(): Board {
   const urgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Crítica", due: "" });
   const lessUrgent = (title: string): Task => ({ id: newId(), title, owner: "Emanuel", status: "A fazer", priority: "Baixa", due: "" });
@@ -260,7 +285,7 @@ function unifyTaskGroups(board: Board): Board {
     .map((g) => (g.name === "Resolvidos" ? { ...g, name: "Concluídas" } : g));
   const merged = existing
     ? { ...existing, tasks: [...existing.tasks, ...mergedTasks] }
-    : { id: urgentGroups[0]!.id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
+    : { id: urgentGroups[0].id, name: "Grupo de Tarefas", color: "#579bfc", tasks: mergedTasks };
   return { ...board, groups: [merged, ...rest] };
 }
 
@@ -295,7 +320,6 @@ function MondayBoard() {
   const [boards, setBoards] = useState<Board[]>(() => [pendenciasBoard()].map(unifyTaskGroups));
   const [boardId, setBoardId] = useState<string>("");
   const [boardsLoaded, setBoardsLoaded] = useState(false);
-  const [saveError, setSaveError] = useState(false);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Status>("Todos");
@@ -330,6 +354,45 @@ function MondayBoard() {
     setBoardsLoaded(true);
   }, []);
 
+  // Resgate: quando o quadro carrega com dados além da semente, baixa o
+  // backup sozinho, uma única vez por abertura — sem depender de clique,
+  // porque o preview do Lovable pode trocar a versão segundos depois.
+  // Não muda nada em persistência/carregamento: só lê os quadros já carregados.
+  const autoBackupDone = useRef(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!boardsLoaded || autoBackupDone.current) return;
+    autoBackupDone.current = true;
+    if (isRichBoard(boards)) {
+      try {
+        downloadBoards(boards);
+      } catch {
+        // Se o navegador bloquear o download automático, o botão Exportar
+        // na barra de ferramentas continua disponível.
+      }
+    }
+  }, [boardsLoaded]);
+
+  const exportBoards = () => downloadBoards(boards);
+
+  const importBoards = (file: File) => {
+    file
+      .text()
+      .then((text) => {
+        const parsed = JSON.parse(text) as { boards?: Board[] } | Board[];
+        const imported = (Array.isArray(parsed) ? parsed : parsed.boards) as Board[] | undefined;
+        if (!Array.isArray(imported) || imported.length === 0 || !imported.every((b) => b && Array.isArray(b.groups))) {
+          throw new Error("invalid");
+        }
+        if (!window.confirm(`Importar o backup com ${imported.length} quadro(s)? Isso substitui o quadro atual neste navegador.`)) return;
+        setBoards(imported);
+        setBoardId(imported[0].id);
+      })
+      .catch(() => {
+        window.alert("Arquivo de backup inválido.");
+      });
+  };
+
   useEffect(() => {
     setEditingUpdateId(null);
     setEditingUpdateText("");
@@ -344,11 +407,10 @@ function MondayBoard() {
     if (boards.length > 0) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
-        setSaveError(false);
       } catch {
-        // Quota do navegador (muitos prints em base64): não derruba o app,
-        // mas avisa na tela — antes a falha era silenciosa e o usuário perdia tudo ao recarregar.
-        setSaveError(true);
+        // Quota do navegador (muitos prints em base64): não derruba o app;
+        // os dados continuam na tela e o próximo salvamento tenta de novo.
+        console.warn("Não foi possível salvar os quadros no navegador (armazenamento cheio).");
       }
     }
   }, [boards, boardsLoaded]);
@@ -377,7 +439,7 @@ function MondayBoard() {
   };
 
   const mentionMatch = updateText.slice(0, cursorPos).match(/@([\wÀ-ÿ]*)$/);
-  const mentionQuery = mentionMatch ? (mentionMatch[1] ?? "") : null;
+  const mentionQuery = mentionMatch ? mentionMatch[1] : null;
   const mentionOptions = mentionQuery !== null ? USERS.filter((u) => u.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [];
   const insertMention = (user: string) => {
     if (mentionQuery === null) return;
@@ -460,9 +522,8 @@ function MondayBoard() {
     const files: File[] = [];
     if (items) {
       for (let i = 0; i < items.length; i++) {
-        const item = items[i]!;
-        if (item.kind === "file" || item.type.startsWith("image/")) {
-          const file = item.getAsFile();
+        if (items[i].kind === "file" || items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
           if (file) files.push(file);
         }
       }
@@ -711,7 +772,7 @@ function MondayBoard() {
     if (!group) return;
     const index = group.tasks.findIndex((t) => t.id === taskId);
     if (index === -1) return;
-    const copy: Task = { ...group.tasks[index]!, id: newId(), updates: [] };
+    const copy = { ...group.tasks[index], id: newId(), updates: [] };
     const tasks = [...group.tasks];
     tasks.splice(index + 1, 0, copy);
     updateBoard({ ...board, groups: board.groups.map((g) => (g.id === groupId ? { ...g, tasks } : g)) });
@@ -784,7 +845,7 @@ function MondayBoard() {
       setBoardId(fresh.id);
     } else {
       setBoards(remaining);
-      if (boardId === id) setBoardId(remaining[0]!.id);
+      if (boardId === id) setBoardId(remaining[0].id);
     }
   };
 
@@ -855,11 +916,6 @@ function MondayBoard() {
         button:focus-visible { outline: 2px solid #0073ea; outline-offset: 2px; }
         button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
       `}</style>
-      {saveError && (
-        <div role="alert" className="sticky top-0 z-50 bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white">
-          ⚠️ Não foi possível salvar! O armazenamento do navegador está cheio (provavelmente por causa dos prints). Não atualize a página — remova alguns prints para liberar espaço.
-        </div>
-      )}
       <div className="flex min-h-screen flex-col md:flex-row">
         <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-slate-200 bg-white p-4 md:w-56 md:border-b-0 md:border-r">
           <div className="flex flex-col gap-1">
@@ -957,6 +1013,23 @@ function MondayBoard() {
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
+            <button onClick={exportBoards} title="Baixar um arquivo com todos os quadros, tarefas, setores e atualizações" className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">
+              Exportar
+            </button>
+            <button onClick={() => importInputRef.current?.click()} title="Carregar um arquivo de backup exportado" className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">
+              Importar
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importBoards(file);
+                e.target.value = "";
+              }}
+            />
           </div>
 
           {view === "table" ? (
