@@ -475,15 +475,14 @@ function MondayBoard() {
     boardsRef.current = boards;
   }, [boards]);
 
-  // Reserva do ao vivo: enquanto o canal em tempo real não estiver inscrito
-  // (falhou ou travou conectando), verifica a nuvem a cada 5s para que as
-  // mudanças dos outros apareçam sem atualizar a página. Só aplica quando a
-  // nuvem é mais nova que o último estado visto e não há edição local
+  // Verificação a cada 5s: consulta a nuvem para que as mudanças dos outros
+  // apareçam sem atualizar a página. Roda sempre, mesmo com o canal em tempo
+  // real inscrito — o canal nem sempre entrega os eventos. Só aplica quando
+  // a nuvem é mais nova que o último estado visto e não há edição local
   // pendente — nunca sobrescreve uma mudança ainda não enviada.
   useEffect(() => {
-    if (!boardsLoaded || !isSupabaseConfigured || !supabase || realtimeOk === true) return;
+    if (!boardsLoaded || !isSupabaseConfigured || !supabase) return;
     const timer = setInterval(() => {
-      if (document.hidden) return;
       supabase
         .from(CLOUD_TABLE)
         .select("data, updated_at")
@@ -505,7 +504,7 @@ function MondayBoard() {
         });
     }, 5000);
     return () => clearInterval(timer);
-  }, [boardsLoaded, realtimeOk]);
+  }, [boardsLoaded]);
 
   useEffect(() => {
     if (!boardsLoaded || !boardId) return;
