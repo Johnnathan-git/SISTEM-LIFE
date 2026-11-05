@@ -253,6 +253,22 @@ function isExampleBoard(b: Board): boolean {
   return b.name === "Meu trabalho" && b.groups.map((g) => g.name).join(",") === "Esta semana,Próximas";
 }
 
+// Migração única: quem abriu o link publicado antes da semente rica tem a
+// semente antiga gravada no navegador, e o carregamento devolve o dado gravado,
+// nunca a semente nova. Se o quadro gravado é a semente antiga intacta
+// (grupos "Grupo de Tarefas" + "Concluídas", 22 tarefas, sem setores e sem
+// atualizações), troca pela semente rica. Qualquer quadro com edição do
+// usuário — setor, atualização, tarefa nova ou título mudado — não é tocado.
+const OLD_SEED_TITLES = new Set<string>(["Transferência de créditos e diárias", "Criar Caixas dos Usuários da recepção e reservas", "Opção de lançar consumo, serviços e pgmts para todos os integrantes da reserva", "Ajustar o sistema para contabilizar a comissão dos vendedores dos bares.", "Relatórios: Receita por pdv, Receita de taxas de serviço, Consumos lançados, Comissão vendedores, Movimentação de estoque, Requisições feitas, Descontos e estornos feitos, recebimentos feitos.", "Criar a opção de cortesia e uso da casa", "Permitindo checkin sem pgmt", "Relatório de recebimentos para os auditores", "Emprestimo/Cauçao de pulseiras e toalhas", "Requisição do almoxarifado ir direto para o compras. Não ter que ajustar o estoque para liberar para mandar para o compras.", "Criar o Portal do contador", "Opção de lançar pagamento Cortesia e Uso da Casa", "Botão de 360 dias para o Painel de Compras", "Diretório já puxar as informações dos hospedes e não precisar cadastrar", "Alterar o item lançado na conta do hospede para não precisar estornar", "Informações de crianças no resumo, e faxetaria de crianças", "Criar a opção de bloqueio e saída do inventario", "Conversão de produtos na base do sistema para aceitar alterar unidade de medida", "Tirar a opçao de forma de pagamento e parcelamento do cadastro do fornecedor.", "Distrinchar mais no modulo Resultado linha por linha, com a nota fiscal. Ainda não dá pra identificar", "Opção de pagamento A Faturar – Ok", "Painel de Pedidos para os bares - Ok"]);
+
+function isOldSeedBoard(b: Board): boolean {
+  if (b.name !== "Pendências do Sistema") return false;
+  if (b.groups.map((g) => g.name).join(",") !== "Grupo de Tarefas,Concluídas") return false;
+  const tasks = b.groups.flatMap((g) => g.tasks);
+  if (tasks.length !== 22) return false;
+  return tasks.every((t) => (t.updates ?? []).length === 0 && !t.sector && OLD_SEED_TITLES.has(t.title));
+}
+
 function loadBoards(): Board[] {
   const fallback = () => [pendenciasBoard()].map(unifyTaskGroups);
   try {
@@ -261,7 +277,8 @@ function loadBoards(): Board[] {
     const parsed = JSON.parse(raw) as Board[];
     if (!Array.isArray(parsed) || parsed.length === 0) return fallback();
     const cleaned = parsed.filter((b) => !isExampleBoard(b)).map(unifyTaskGroups);
-    return cleaned.length > 0 ? cleaned : fallback();
+    const migrated = cleaned.map((b) => (isOldSeedBoard(b) ? pendenciasBoard() : b));
+    return migrated.length > 0 ? migrated : fallback();
   } catch {
     return fallback();
   }
