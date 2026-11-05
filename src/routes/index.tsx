@@ -275,9 +275,13 @@ function MondayBoard() {
   const [boards, setBoards] = useState<Board[]>(() => [pendenciasBoard()].map(unifyTaskGroups));
   const [boardId, setBoardId] = useState<string>("");
   const [cloudStatus, setCloudStatus] = useState<"off" | "connecting" | "on" | "error">("off");
+  // Ao vivo: null = ainda conectando, true = canal inscrito, false = falhou.
+  const [realtimeOk, setRealtimeOk] = useState<boolean | null>(null);
   const clientIdRef = useRef<string>("");
   const cloudReadyRef = useRef(false);
   const lastCloudJsonRef = useRef<string>("");
+  const lastCloudAtRef = useRef<string>("");
+  const boardsRef = useRef<Board[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
@@ -329,6 +333,7 @@ function MondayBoard() {
   useEffect(() => {
     if (!boardsLoaded || !isSupabaseConfigured || !supabase) return;
     setCloudStatus("connecting");
+    setRealtimeOk(null);
     let cancelled = false;
     const channel = supabase
       .channel("boards-sync")
@@ -336,19 +341,23 @@ function MondayBoard() {
         "postgres_changes",
         { event: "*", schema: "public", table: CLOUD_TABLE, filter: `id=eq.${CLOUD_ROW_ID}` },
         (payload) => {
-          const row = payload.new as { data?: unknown; updated_by?: string };
+          const row = payload.new as { data?: unknown; updated_by?: string; updated_at?: string };
           if (!row || row.updated_by === clientIdRef.current) return;
           if (!Array.isArray(row.data)) return;
           const json = JSON.stringify(row.data);
           if (json === lastCloudJsonRef.current) return;
           lastCloudJsonRef.current = json;
+          if (row.updated_at) lastCloudAtRef.current = row.updated_at;
           setBoards(row.data as Board[]);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") setRealtimeOk(true);
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setRealtimeOk(false);
+      });
     supabase
       .from(CLOUD_TABLE)
-      .select("data, updated_by")
+      .select("data, updated_by, updated_at")
       .eq("id", CLOUD_ROW_ID)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -360,6 +369,7 @@ function MondayBoard() {
         }
         if (data && Array.isArray(data.data)) {
           const json = JSON.stringify(data.data);
+          if (data.updated_at) lastCloudAtRef.current = data.updated_at;
           if (json !== JSON.stringify(boards)) {
             lastCloudJsonRef.current = json;
             setBoards(data.data as Board[]);
@@ -370,9 +380,11 @@ function MondayBoard() {
         } else {
           const json = JSON.stringify(boards);
           lastCloudJsonRef.current = json;
+          const at = new Date().toISOString();
+          lastCloudAtRef.current = at;
           supabase
             .from(CLOUD_TABLE)
-            .upsert({ id: CLOUD_ROW_ID, data: boards, updated_by: clientIdRef.current, updated_at: new Date().toISOString() })
+            .upsert({ id: CLOUD_ROW_ID, data: boards, updated_by: clientIdRef.current, updated_at: at })
             .then(({ error: upsertError }) => {
               if (!cancelled) setCloudStatus(upsertError ? "error" : "on");
             });
@@ -415,9 +427,11 @@ function MondayBoard() {
     if (json === lastCloudJsonRef.current) return;
     const timer = setTimeout(() => {
       lastCloudJsonRef.current = json;
+      const at = new Date().toISOString();
+      lastCloudAtRef.current = at;
       supabase
         .from(CLOUD_TABLE)
-        .upsert({ id: CLOUD_ROW_ID, data: boards, updated_by: clientIdRef.current, updated_at: new Date().toISOString() })
+        .upsert({ id: CLOUD_ROW_ID, data: boards, updated_by: clientIdRef.current, updated_at: at })
         .then(({ error }) => {
           if (error) setCloudStatus("error");
           else setCloudStatus("on");
@@ -425,6 +439,42 @@ function MondayBoard() {
     }, 1000);
     return () => clearTimeout(timer);
   }, [boards, boardsLoaded]);
+
+  // Espelho do quadro para a verificação da nuvem não ler um estado velho.
+  useEffect(() => {
+    boardsRef.current = boards;
+  }, [boards]);
+
+  // Reserva do ao vivo: se o canal em tempo real falhar, verifica a nuvem a
+  // cada 5s para que as mudanças dos outros apareçam sem atualizar a página.
+  // Só aplica quando a nuvem é mais nova que o último estado visto e não há
+  // edição local pendente — nunca sobrescreve uma mudança ainda não enviada.
+  useEffect(() => {
+    if (!boardsLoaded || !isSupabaseConfigured || !supabase || realtimeOk !== false) return;
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      supabase
+        .from(CLOUD_TABLE)
+        .select("data, updated_at")
+        .eq("id", CLOUD_ROW_ID)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error || !data || !Array.isArray(data.data)) return;
+          const at = (data as { updated_at?: string }).updated_at;
+          const atMs = at ? Date.parse(at) : NaN;
+          if (!at || Number.isNaN(atMs)) return;
+          const lastMs = Date.parse(lastCloudAtRef.current);
+          if (!Number.isNaN(lastMs) && atMs <= lastMs) return;
+          if (JSON.stringify(boardsRef.current) !== lastCloudJsonRef.current) return;
+          const json = JSON.stringify(data.data);
+          if (json === lastCloudJsonRef.current) return;
+          lastCloudJsonRef.current = json;
+          lastCloudAtRef.current = at;
+          setBoards(data.data as Board[]);
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [boardsLoaded, realtimeOk]);
 
   useEffect(() => {
     if (!boardsLoaded || !boardId) return;
@@ -1029,14 +1079,16 @@ function MondayBoard() {
                 !isSupabaseConfigured
                   ? "Sem banco online configurado — os dados vivem só neste navegador"
                   : cloudStatus === "on"
-                    ? "Quadro sincronizado na nuvem — mudanças aparecem nos outros navegadores"
+                    ? realtimeOk === false
+                      ? "Sincronizado na nuvem, mas o ao vivo falhou — as mudanças dos outros aparecem em alguns segundos"
+                      : "Quadro sincronizado na nuvem — mudanças aparecem nos outros navegadores"
                     : cloudStatus === "error"
                       ? "Não foi possível falar com a nuvem — os dados estão só neste navegador"
                       : "Conectando à nuvem…"
               }
               className={`text-xs font-semibold ${!isSupabaseConfigured || cloudStatus === "error" ? "text-slate-400" : cloudStatus === "on" ? "text-emerald-600" : "text-slate-400"}`}
             >
-              {!isSupabaseConfigured ? "○ Só neste navegador" : cloudStatus === "on" ? "● Nuvem" : cloudStatus === "error" ? "● Sem nuvem" : "○ Nuvem…"}
+              {!isSupabaseConfigured ? "○ Só neste navegador" : cloudStatus === "on" ? (realtimeOk === false ? "● Nuvem • sem ao vivo" : "● Nuvem") : cloudStatus === "error" ? "● Sem nuvem" : "○ Nuvem…"}
             </span>
           </div>
 
