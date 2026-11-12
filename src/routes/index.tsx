@@ -16,9 +16,16 @@ type Update = {
   author: string;
   text: string;
   createdAt: string;
-  attachments?: { name: string; dataUrl: string; type: string }[];
+  attachments?: Attachment[];
   edited?: boolean;
 };
+
+// Anexo: "url" é o arquivo no Storage (novo); "dataUrl" é o base64 embutido
+// (legado — só leitura, até a migração). O base64 dentro do quadro inchava o
+// JSON para 6,5 MB e fazia o envio falhar sem aviso nem nova tentativa.
+type Attachment = { name: string; dataUrl?: string; url?: string; type: string };
+
+const attachmentSrc = (att: Attachment) => att.url || att.dataUrl || "";
 
 type Task = {
   id: string;
@@ -200,6 +207,7 @@ const LOCAL_AT_KEY = "sistema2-local-updated-at";
 // Sem Supabase configurado, o app continua só com o armazenamento local.
 const CLOUD_TABLE = "boards";
 const CLOUD_ROW_ID = "main";
+const ATTACHMENTS_BUCKET = "attachments";
 const CLIENT_ID_KEY = "sistema2-client-id";
 
 // Semente = versao rica exportada em 2026-11-05 (sistema2-backup-2026-11-05.json):
@@ -275,7 +283,7 @@ function formatDate(value: string) {
 function MondayBoard() {
   const [boards, setBoards] = useState<Board[]>(() => [pendenciasBoard()].map(unifyTaskGroups));
   const [boardId, setBoardId] = useState<string>("");
-  const [cloudStatus, setCloudStatus] = useState<"off" | "connecting" | "on" | "error">("off");
+  const [cloudStatus, setCloudStatus] = useState<"off" | "connecting" | "on" | "error" | "saving">("off");
   // Ao vivo: null = ainda conectando, true = canal inscrito, false = falhou.
   const [realtimeOk, setRealtimeOk] = useState<boolean | null>(null);
   const clientIdRef = useRef<string>("");
@@ -293,9 +301,13 @@ function MondayBoard() {
   const [updateText, setUpdateText] = useState("");
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
   const [editingUpdateText, setEditingUpdateText] = useState("");
-  const [editingAttachments, setEditingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
+  const [editingAttachments, setEditingAttachments] = useState<Attachment[]>([]);
   const [showDetails, setShowDetails] = useState(false);
-  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; dataUrl: string; type: string }[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  // Anexos sendo enviados ao Storage agora; a atualização só é postada quando
+  // terminam, para o anexo não cair na próxima atualização por engano.
+  const [uploadingAttachments, setUploadingAttachments] = useState(0);
+  const [attachError, setAttachError] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [updateAuthor, setUpdateAuthor] = useState("Johnnathan");
@@ -450,24 +462,42 @@ function MondayBoard() {
 
   // Nuvem: salva com 1s de atraso após cada mudança, para não mandar a cada tecla.
   // Não salva antes da primeira leitura da nuvem, para não sobrescrever um
-  // quadro mais novo que ainda não foi lido.
+  // quadro mais novo que ainda não foi lido. Só marca como enviado depois que
+  // o envio dá certo — antes marcava antes de enviar, e se falhasse a mudança
+  // ficava só neste navegador sem aviso. Se falhar, tenta de novo sozinho.
   useEffect(() => {
     if (!boardsLoaded || !cloudReadyRef.current || !isSupabaseConfigured || !supabase) return;
     const json = JSON.stringify(boards);
     if (json === lastCloudJsonRef.current) return;
-    const timer = setTimeout(() => {
-      lastCloudJsonRef.current = json;
+    let cancelled = false;
+    let attempts = 0;
+    let retryTimer = 0;
+    const save = () => {
+      if (cancelled) return;
+      setCloudStatus("saving");
       const at = new Date().toISOString();
-      lastCloudAtRef.current = at;
       supabase
         .from(CLOUD_TABLE)
         .upsert({ id: CLOUD_ROW_ID, data: boards, updated_by: clientIdRef.current, updated_at: at })
         .then(({ error }) => {
-          if (error) setCloudStatus("error");
-          else setCloudStatus("on");
+          if (cancelled) return;
+          if (error) {
+            setCloudStatus("error");
+            attempts += 1;
+            if (attempts <= 5) retryTimer = window.setTimeout(save, 5000 * attempts);
+          } else {
+            lastCloudJsonRef.current = json;
+            lastCloudAtRef.current = at;
+            setCloudStatus("on");
+          }
         });
-    }, 1000);
-    return () => clearTimeout(timer);
+    };
+    const timer = window.setTimeout(save, 1000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(retryTimer);
+    };
   }, [boards, boardsLoaded]);
 
   // Espelho do quadro para a verificação da nuvem não ler um estado velho.
@@ -586,12 +616,52 @@ function MondayBoard() {
     }
   };
 
+  // Sobe o anexo para o Storage e devolve só o link. O quadro guarda o link —
+  // nunca mais o arquivo em base64, que era o que inchava o JSON para 6,5 MB
+  // e quebrava a sincronização (cada salvamento subia tudo de novo).
+  const uploadAttachmentToCloud = async (att: { name: string; dataUrl: string; type: string }): Promise<Attachment | null> => {
+    if (!isSupabaseConfigured || !supabase) return null;
+    try {
+      const blob = await (await fetch(att.dataUrl)).blob();
+      const ext = (att.name.split(".").pop() || "").replace(/[^a-zA-Z0-9]/g, "") || (att.type === "image/jpeg" ? "jpg" : "bin");
+      const path = `${newId()}.${ext}`;
+      const { error } = await supabase.storage.from(ATTACHMENTS_BUCKET).upload(path, blob, { contentType: att.type || blob.type || "application/octet-stream", upsert: false });
+      if (error) return null;
+      const { data } = supabase.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(path);
+      return { name: att.name, url: data.publicUrl, type: att.type };
+    } catch {
+      return null;
+    }
+  };
+
+  // Anexa e já envia ao Storage: quando o usuário postar, o anexo já é um
+  // link. Se o envio falhar, avisa e não embute o arquivo no quadro.
   const addAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => processAttachmentFile(file, (att) => setPendingAttachments((prev) => [...prev, att])));
+    files.forEach((file) =>
+      processAttachmentFile(file, (att) => {
+        setAttachError("");
+        setUploadingAttachments((n) => n + 1);
+        uploadAttachmentToCloud(att).then((uploaded) => {
+          setUploadingAttachments((n) => Math.max(0, n - 1));
+          if (uploaded) setPendingAttachments((prev) => [...prev, uploaded]);
+          else setAttachError("Não foi possível enviar o anexo — confira a conexão e tente de novo. O arquivo não foi embutido no quadro.");
+        });
+      }),
+    );
   };
 
   const addEditAttachmentsFromFiles = (files: File[]) => {
-    files.forEach((file) => processAttachmentFile(file, (att) => setEditingAttachments((prev) => [...prev, att])));
+    files.forEach((file) =>
+      processAttachmentFile(file, (att) => {
+        setAttachError("");
+        setUploadingAttachments((n) => n + 1);
+        uploadAttachmentToCloud(att).then((uploaded) => {
+          setUploadingAttachments((n) => Math.max(0, n - 1));
+          if (uploaded) setEditingAttachments((prev) => [...prev, uploaded]);
+          else setAttachError("Não foi possível enviar o anexo — confira a conexão e tente de novo. O arquivo não foi embutido no quadro.");
+        });
+      }),
+    );
   };
 
   // Colar igual no chat: com o card de atualização aberto, Ctrl+V em qualquer
@@ -873,6 +943,8 @@ function MondayBoard() {
     const text = updateText.trim();
     // Um print sozinho, sem texto, também tem que salvar. Antes isso voltava sem fazer nada.
     if (!text && pendingAttachments.length === 0) return;
+    // Espera o anexo terminar de subir — senão ele cai na próxima atualização.
+    if (uploadingAttachments > 0) return;
     const group = board.groups.find((g) => g.id === groupId);
     const task = group?.tasks.find((t) => t.id === taskId);
     if (!group || !task) return;
@@ -900,6 +972,8 @@ function MondayBoard() {
   const editUpdate = (groupId: string, taskId: string, updateId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    // Espera o anexo terminar de subir — senão ele cai na próxima edição.
+    if (uploadingAttachments > 0) return;
     updateBoard({
       ...board,
       groups: board.groups.map((g) =>
@@ -1113,12 +1187,14 @@ function MondayBoard() {
                       ? "Sincronizado na nuvem, mas o ao vivo falhou — as mudanças dos outros aparecem em alguns segundos"
                       : "Quadro sincronizado na nuvem — mudanças aparecem nos outros navegadores"
                     : cloudStatus === "error"
-                      ? "Não foi possível falar com a nuvem — os dados estão só neste navegador"
-                      : "Conectando à nuvem…"
+                      ? "Não foi possível falar com a nuvem — tentando de novo sozinho; os dados estão só neste navegador até subir"
+                      : cloudStatus === "saving"
+                        ? "Salvando na nuvem…"
+                        : "Conectando à nuvem…"
               }
-              className={`text-xs font-semibold ${!isSupabaseConfigured || cloudStatus === "error" ? "text-slate-400" : cloudStatus === "on" ? "text-emerald-600" : "text-slate-400"}`}
+              className={`text-xs font-semibold ${!isSupabaseConfigured || cloudStatus === "error" ? "text-slate-400" : cloudStatus === "on" || cloudStatus === "saving" ? "text-emerald-600" : "text-slate-400"}`}
             >
-              {!isSupabaseConfigured ? "○ Só neste navegador" : cloudStatus === "on" ? (realtimeOk === false ? "● Nuvem • sem ao vivo" : "● Nuvem") : cloudStatus === "error" ? "● Sem nuvem" : "○ Nuvem…"}
+              {!isSupabaseConfigured ? "○ Só neste navegador" : cloudStatus === "on" ? (realtimeOk === false ? "● Nuvem • sem ao vivo" : "● Nuvem") : cloudStatus === "error" ? "● Sem nuvem" : cloudStatus === "saving" ? "● Salvando…" : "○ Nuvem…"}
             </span>
           </div>
 
@@ -1559,7 +1635,7 @@ function MondayBoard() {
                           {pendingAttachments.map((att, i) => (
                             <div key={i} className="relative rounded-md border border-slate-200 p-1">
                               {att.type.startsWith("image") ? (
-                                <img src={att.dataUrl} alt={att.name} className="h-20 w-auto rounded" />
+                                <img src={attachmentSrc(att)} alt={att.name} className="h-20 w-auto rounded" />
                               ) : (
                                 <span className="text-sm">{att.name}</span>
                               )}
@@ -1568,6 +1644,8 @@ function MondayBoard() {
                           ))}
                         </div>
                       )}
+                      {uploadingAttachments > 0 && <p className="mt-3 text-xs text-slate-500">Enviando anexo… aguarde antes de atualizar.</p>}
+                      {attachError && <p className="mt-3 text-xs text-red-600">{attachError}</p>}
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <p className="text-xs text-slate-500">Cole o print aqui na conversa (Ctrl+V) que ele anexa sozinho. Dá para enviar só o print, sem texto. Ctrl+Enter envia.</p>
                         <button onClick={() => addUpdate(selGroup.id, selTask.id)} className="shrink-0 rounded-md bg-[#0073ea] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0060c8]">
@@ -1619,7 +1697,7 @@ function MondayBoard() {
                                         {editingAttachments.map((att, i) => (
                                           <div key={i} className="relative rounded-md border border-slate-200 p-1">
                                             {att.type.startsWith("image") ? (
-                                              <img src={att.dataUrl} alt={att.name} className="h-20 w-auto rounded" />
+                                              <img src={attachmentSrc(att)} alt={att.name} className="h-20 w-auto rounded" />
                                             ) : (
                                               <span className="text-sm">{att.name}</span>
                                             )}
@@ -1628,6 +1706,8 @@ function MondayBoard() {
                                         ))}
                                       </div>
                                     )}
+                                    {uploadingAttachments > 0 && <p className="mt-2 text-xs text-slate-500">Enviando anexo… aguarde antes de salvar.</p>}
+                                    {attachError && <p className="mt-2 text-xs text-red-600">{attachError}</p>}
                                     <div className="mt-2 flex gap-2">
                                       <button onClick={() => editUpdate(selGroup.id, selTask.id, u.id, editingUpdateText)} className="rounded-md bg-[#0073ea] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#0060c8]">
                                         Salvar
@@ -1652,11 +1732,11 @@ function MondayBoard() {
                                     {(u.attachments ?? []).map((att, ai) => (
                                       att.type.startsWith("image") ? (
                                         <div key={ai} className="flex flex-col items-start gap-1">
-                                          <img src={att.dataUrl} alt={att.name} className="max-h-48 rounded-md border border-slate-200" />
-                                          <a href={att.dataUrl} download={att.name} className="text-xs text-slate-400 underline">Baixar</a>
+                                          <img src={attachmentSrc(att)} alt={att.name} className="max-h-48 rounded-md border border-slate-200" />
+                                          <a href={attachmentSrc(att)} download={att.name} className="text-xs text-slate-400 underline">Baixar</a>
                                         </div>
                                       ) : (
-                                        <a key={ai} href={att.dataUrl} download={att.name} className="text-sm underline">{att.name}</a>
+                                        <a key={ai} href={attachmentSrc(att)} download={att.name} className="text-sm underline">{att.name}</a>
                                       )
                                     ))}
                                   </div>
