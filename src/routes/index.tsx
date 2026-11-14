@@ -166,8 +166,15 @@ const BOARD_ID_KEY = "sistema2-monday-board-id";
 // cópia de segurança do quadro local quando a nuvem prevalece.
 const CLOUD_BASE_KEY = "sistema2-cloud-base";
 const LOCAL_BACKUP_KEY = "sistema2-local-backup";
-// Chaves da versão anterior da sincronização, apagadas na abertura.
-const LEGACY_KEYS = ["sistema2-local-updated-at", "sistema2-client-id"];
+// Chaves da versão anterior da sincronização. São apagadas só depois que a
+// primeira base nova fica gravada, para a recuperação abaixo valer até lá.
+const LEGACY_LOCAL_AT_KEY = "sistema2-local-updated-at";
+const LEGACY_KEYS = [LEGACY_LOCAL_AT_KEY, "sistema2-client-id"];
+// Cópia da linha "main" como estava em 10/11/2026 21:03 UTC, quando o quadro
+// (6,8 MB com prints embutidos) parou de conseguir gravar na nuvem. Navegadores
+// da versão anterior usam essa cópia como base para mesclar o que ficou só
+// neles, em vez de a nuvem apagar essas edições.
+const LEGACY_BASE_ROW_ID = "legacy-base";
 
 // Sincronização na nuvem (Supabase, projeto "Vida Sistêmica"): o quadro mora
 // numa linha só da tabela "boards" (id "main") e vale para todos os navegadores.
@@ -266,6 +273,7 @@ function loadCloudBase(): CloudBase<Board[]> | null {
 function saveCloudBase(base: CloudBase<Board[]>) {
   try {
     localStorage.setItem(CLOUD_BASE_KEY, JSON.stringify(base));
+    LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
   } catch {
     // Sem espaço: melhor não ter base do que ter uma base velha.
     try {
@@ -274,6 +282,29 @@ function saveCloudBase(base: CloudBase<Board[]>) {
       // ignora
     }
   }
+}
+
+function allUpdateIds(boards: Board[]): string[] {
+  return boards.flatMap((b) => b.groups.flatMap((g) => g.tasks.flatMap((t) => (t.updates ?? []).map((u) => u.id))));
+}
+
+// Recuperação única para quem usava a versão anterior: se este navegador tem
+// um quadro salvo pela versão antiga e ele contém tudo o que a cópia de 10/11
+// tem (ou seja, não é uma versão mais velha que ela), a cópia vira a base da
+// mescla — e as edições que ficaram só aqui sobem para a nuvem junto com as
+// dos outros. Caso contrário, a nuvem vale e o quadro local vai para backup.
+async function loadLegacyBase(client: NonNullable<typeof supabase>, local: Board[]): Promise<CloudBase<Board[]> | null> {
+  try {
+    if (!localStorage.getItem(STORAGE_KEY) || !localStorage.getItem(LEGACY_LOCAL_AT_KEY)) return null;
+  } catch {
+    return null;
+  }
+  const { data, error } = await client.from(CLOUD_TABLE).select("data").eq("id", LEGACY_BASE_ROW_ID).maybeSingle();
+  const legacy = (data as { data?: unknown } | null)?.data;
+  if (error || !isBoardList(legacy)) return null;
+  const localUpdates = new Set(allUpdateIds(local));
+  if (!allUpdateIds(legacy).every((id) => localUpdates.has(id))) return null;
+  return { data: legacy, at: LEGACY_BASE_ROW_ID };
 }
 
 function formatDate(value: string) {
@@ -288,6 +319,10 @@ function MondayBoard() {
   // Ao vivo: null = ainda conectando, true = canal inscrito, false = falhou.
   const [realtimeOk, setRealtimeOk] = useState<boolean | null>(null);
   const syncRef = useRef<BoardSync<Board[]> | null>(null);
+  // Quadro mais recente, para a sincronização começar do estado atual mesmo
+  // se o usuário editar enquanto ela ainda está conectando.
+  const latestBoardsRef = useRef<Board[]>(boards);
+  latestBoardsRef.current = boards;
   const [cloudReady, setCloudReady] = useState(false);
   const migratingRef = useRef(false);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
@@ -317,11 +352,6 @@ function MondayBoard() {
   const [dropGroup, setDropGroup] = useState<{ groupId: string; after: boolean } | null>(null);
 
   useEffect(() => {
-    try {
-      LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
-    } catch {
-      // Sem acesso ao armazenamento: nada a limpar.
-    }
     const loaded = loadBoards();
     setBoards(loaded);
     let savedBoardId: string | null = null;
@@ -339,39 +369,47 @@ function MondayBoard() {
   // 5s, e novas tentativas automáticas. Aqui a tela só liga e desliga.
   useEffect(() => {
     if (!boardsLoaded || !isSupabaseConfigured || !supabase) return;
-    const sync = new BoardSync<Board[]>({
-      client: supabase,
-      table: CLOUD_TABLE,
-      rowId: CLOUD_ROW_ID,
-      initial: boards,
-      storedBase: loadCloudBase(),
-      validate: isBoardList,
-      merge: mergeBoards,
-      onRemote: (data) => {
-        // Grava já no navegador, antes da base: se a aba fechar no meio, a
-        // próxima abertura não confunde o quadro antigo com uma edição local.
-        persistLocalBoards(data);
-        setBoards(data);
-      },
-      onBase: saveCloudBase,
-      onStatus: setCloudStatus,
-      onRealtime: setRealtimeOk,
-      onReady: () => setCloudReady(true),
-      onDiscardLocal: (local) => {
-        try {
-          localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify({ at: new Date().toISOString(), boards: local }));
-        } catch {
-          // Sem espaço para o backup: segue com a nuvem.
-        }
-      },
-    });
-    syncRef.current = sync;
-    sync.start();
-    const flush = () => sync.flush();
+    const client = supabase;
+    let cancelled = false;
+    let sync: BoardSync<Board[]> | null = null;
+    const flush = () => sync?.flush();
     window.addEventListener("pagehide", flush);
+    void (async () => {
+      const storedBase = loadCloudBase() ?? (await loadLegacyBase(client, latestBoardsRef.current));
+      if (cancelled) return;
+      sync = new BoardSync<Board[]>({
+        client,
+        table: CLOUD_TABLE,
+        rowId: CLOUD_ROW_ID,
+        initial: latestBoardsRef.current,
+        storedBase,
+        validate: isBoardList,
+        merge: mergeBoards,
+        onRemote: (data) => {
+          // Grava já no navegador, antes da base: se a aba fechar no meio, a
+          // próxima abertura não confunde o quadro antigo com uma edição local.
+          persistLocalBoards(data);
+          setBoards(data);
+        },
+        onBase: saveCloudBase,
+        onStatus: setCloudStatus,
+        onRealtime: setRealtimeOk,
+        onReady: () => setCloudReady(true),
+        onDiscardLocal: (local) => {
+          try {
+            localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify({ at: new Date().toISOString(), boards: local }));
+          } catch {
+            // Sem espaço para o backup: segue com a nuvem.
+          }
+        },
+      });
+      syncRef.current = sync;
+      sync.start();
+    })();
     return () => {
+      cancelled = true;
       window.removeEventListener("pagehide", flush);
-      sync.stop();
+      sync?.stop();
       syncRef.current = null;
     };
     // O quadro inicial só importa na abertura; depois ele chega por localChange.
