@@ -41,6 +41,10 @@ export type BoardSyncOptions<T> = {
 
 type Row = { data?: unknown; updated_at?: string | null };
 
+// Espera depois da última mudança antes de enviar: curta o bastante para o
+// outro ver na hora, longa o bastante para não mandar a cada tecla digitada.
+const SAVE_DELAY_MS = 400;
+
 export class BoardSync<T> {
   private readonly o: BoardSyncOptions<T>;
   private readonly sessionId = newSessionId();
@@ -54,6 +58,7 @@ export class BoardSync<T> {
   private stopped = false;
   private chain: Promise<void> = Promise.resolve();
   private pullQueued = false;
+  private pullForce = false;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private pollTimer: ReturnType<typeof setInterval> | undefined;
   private retryDelay = 2000;
@@ -75,8 +80,9 @@ export class BoardSync<T> {
         "postgres_changes",
         { event: "*", schema: "public", table: this.o.table, filter: `id=eq.${this.o.rowId}` },
         // Não confia no conteúdo do evento (o Supabase corta linhas grandes):
-        // o evento só avisa que mudou, e o quadro é lido de novo.
-        () => this.requestPull(),
+        // o evento só avisa que mudou, e o quadro é lido de novo na hora,
+        // sem a consulta prévia do carimbo.
+        () => this.requestPull(true),
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -113,7 +119,7 @@ export class BoardSync<T> {
     if (json === this.localJson) return;
     this.local = data;
     this.localJson = json;
-    if (this.ready && this.dirty()) this.scheduleSave(800);
+    if (this.ready && this.dirty()) this.scheduleSave(SAVE_DELAY_MS);
   }
 
   // Envia agora o que estiver pendente (ex.: antes de fechar a aba).
@@ -148,12 +154,18 @@ export class BoardSync<T> {
     });
   }
 
-  private requestPull() {
-    if (this.pullQueued || this.stopped) return;
+  // force = veio do canal ao vivo: a nuvem com certeza mudou, então pula a
+  // consulta do carimbo e baixa o quadro direto (uma ida ao servidor a menos).
+  private requestPull(force = false) {
+    if (this.stopped) return;
+    if (force) this.pullForce = true;
+    if (this.pullQueued) return;
     this.pullQueued = true;
     this.enqueue(async () => {
       this.pullQueued = false;
-      await this.pull();
+      const f = this.pullForce;
+      this.pullForce = false;
+      await this.pull(f);
     });
   }
 
@@ -176,11 +188,11 @@ export class BoardSync<T> {
     this.o.onRemote(data);
   }
 
-  private async pull(): Promise<void> {
+  private async pull(force = false): Promise<void> {
     const { client, table, rowId } = this.o;
 
     // Consulta leve: só o carimbo. Se não mudou, não baixa o quadro.
-    if (this.ready && this.rowExists) {
+    if (!force && this.ready && this.rowExists) {
       const head = await client.from(table).select("updated_at").eq("id", rowId).maybeSingle();
       if (head.error) {
         this.setStatus("error");

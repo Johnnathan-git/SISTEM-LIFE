@@ -390,7 +390,7 @@ function MondayBoard() {
     // e esse salvamento de montagem sobrescrevia exclusões do usuário.
     if (!boardsLoaded) return;
     if (boards.length > 0) persistLocalBoards(boards);
-    // Avisa a sincronização; ela envia à nuvem com 0,8s de atraso.
+    // Avisa a sincronização; ela envia à nuvem em 0,4s.
     syncRef.current?.localChange(boards);
   }, [boards, boardsLoaded]);
 
